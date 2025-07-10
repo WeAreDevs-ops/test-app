@@ -1,115 +1,63 @@
-const https = require('https');
-
-function robloxRequest({ method, hostname, path, cookie, csrfToken = '', includeCsrf = false }) {
-  return new Promise((resolve) => {
-    const options = {
-      method,
-      hostname,
-      path,
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Roblox/WinInet',
-        'Accept': 'application/json',
-        'Cookie': `.ROBLOSECURITY=${cookie}`,
-      },
-    };
-
-    if (csrfToken) {
-      options.headers['X-CSRF-TOKEN'] = csrfToken;
-    }
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      const csrf = res.headers['x-csrf-token'];
-
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data || '{}');
-          if (includeCsrf && csrf) {
-            resolve({ ...json, csrfToken: csrf });
-          } else {
-            resolve(json);
-          }
-        } catch (e) {
-          resolve({ error: 'Failed to parse response', raw: data });
-        }
-      });
-    });
-
-    req.on('error', (err) => {
-      console.error('Request error:', err);
-      resolve({ error: 'Request failed' });
-    });
-
-    req.write('{}');
-    req.end();
-  }).catch((err) => {
-    console.error('robloxRequest error:', err);
-    if (err.error === 'Request failed') {
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(robloxRequest({ ...err.options, csrfToken: '' }));
-        }, 1000);
-      });
-    }
-    throw err;
-  });
-}
+const fetch = require('node-fetch');
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).end();
 
-  const cookie = req.body?.cookie;
-  if (!cookie || !cookie.startsWith('_|WARNING')) {
-    return res.status(400).json({ error: 'Missing or invalid .ROBLOSECURITY cookie' });
+  const { cookie } = req.body;
+
+  if (!cookie || !cookie.includes('_|')) {
+    return res.status(400).json({ success: false, error: 'Missing or invalid cookie' });
   }
 
   try {
-    // Step 1: Check if email is present
-    const emailInfo = await robloxRequest({
+    // Step 1: Get CSRF Token
+    const csrfRes = await fetch('https://auth.roblox.com/v2/logout', {
+      method: 'POST',
+      headers: { Cookie: `.ROBLOSECURITY=${cookie}` }
+    });
+
+    const csrfToken = csrfRes.headers.get('x-csrf-token');
+    if (!csrfToken) throw new Error('Failed to fetch CSRF token');
+
+    // Step 2: Check if email exists
+    const emailRes = await fetch('https://accountinformation.roblox.com/v1/email', {
       method: 'GET',
-      hostname: 'accountinformation.roblox.com',
-      path: `/v1/users/${cookie}/email`,
-      cookie,
+      headers: {
+        'X-CSRF-TOKEN': csrfToken,
+        'Cookie': `.ROBLOSECURITY=${cookie}`,
+        'User-Agent': 'Roblox/WinInet'
+      }
     });
 
-    if (!emailInfo) {
-      return res.status(400).json({ error: 'No email found on account or invalid cookie' });
+    const emailData = await emailRes.json();
+    console.log('Email API response:', emailData); // <- Log for debugging
+
+    if (!emailData || !emailData.data || !emailData.data.EmailAddress) {
+      return res.status(400).json({ success: false, error: 'No email found on account or invalid cookie' });
     }
 
-    // Step 2: Get CSRF token
-    const csrfRes = await robloxRequest({
+    // Step 3: Remove email
+    const removeRes = await fetch('https://accountinformation.roblox.com/v1/email/remove', {
       method: 'POST',
-      hostname: 'accountinformation.roblox.com',
-      path: '/v1/email/remove',
-      cookie,
-      includeCsrf: true,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Cookie': `.ROBLOSECURITY=${cookie}`,
+        'User-Agent': 'Roblox/WinInet'
+      }
     });
 
-    const csrfToken = csrfRes.csrfToken;
-    if (!csrfToken) {
-      return res.status(400).json({ error: 'Failed to get CSRF token' });
+    const removeData = await removeRes.json();
+    console.log('Remove response:', removeData);
+
+    if (removeData.errors) {
+      return res.status(500).json({ success: false, error: 'Failed to remove email' });
     }
 
-    // Step 3: Send final remove request
-    const removeRes = await robloxRequest({
-      method: 'POST',
-      hostname: 'accountinformation.roblox.com',
-      path: '/v1/email/remove',
-      cookie,
-      csrfToken,
-    });
+    return res.status(200).json({ success: true, message: 'Email successfully removed ✅' });
 
-    if (removeRes.errors && removeRes.errors.length > 0) {
-      return res.status(400).json({ error: 'Failed to remove email', details: removeRes.errors });
-    }
-
-    return res.status(200).json({ success: true, message: 'Email successfully removed' });
   } catch (err) {
-    console.error('Unexpected error:', err);
-    return res.status(500).json({ error: 'Unexpected server error' });
+    console.error('Error:', err);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 }
