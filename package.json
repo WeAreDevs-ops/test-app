@@ -1,14 +1,16 @@
 {
   "name": "roblox-email-remover",
   "version": "1.0.0",
-  "main": "server.js",
+  "description": "Simple frontend and backend for removing Roblox email using .ROBLOSECURITY",
+  "main": "api/remove-email.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node api/remove-email.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "node-fetch": "^2.6.12",
-    "cors": "^2.8.5",
-    "body-parser": "^1.20.2"
+    "node-fetch": "^2.6.7"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
