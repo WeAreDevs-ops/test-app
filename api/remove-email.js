@@ -152,7 +152,7 @@ function deleteEmail(cookie, csrfToken, emailAddress) {
 
     const req = https.request(
       {
-        method: "PATCH",
+        method: "POST",
         hostname: "accountsettings.roblox.com",
         path: "/v1/email",
         headers: {
