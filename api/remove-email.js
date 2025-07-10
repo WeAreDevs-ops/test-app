@@ -44,6 +44,16 @@ function robloxRequest({ method, hostname, path, cookie, csrfToken = '', include
 
     req.write('{}');
     req.end();
+  }).catch((err) => {
+    console.error('robloxRequest error:', err);
+    if (err.error === 'Request failed') {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(robloxRequest({ ...err.options, csrfToken: '' }));
+        }, 1000);
+      });
+    }
+    throw err;
   });
 }
 
