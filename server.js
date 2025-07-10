@@ -1,22 +1,18 @@
-// server.js
-import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import removeEmailHandler from './api/remove-email.js';
+import express from "express";
+import removeEmailHandler from "./api/remove-email.js";
+import bodyParser from "body-parser";
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+app.use(bodyParser.json());
+app.post("/api/remove-email", removeEmailHandler);
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// Optional: add root route for checking
+app.get("/", (req, res) => {
+  res.send("✅ API is live");
+});
 
-// Backend route
-app.post('/api/remove-email', removeEmailHandler);
-
-// Start server
-app.listen(port, () => {
-  console.log(`✅ Server running on port ${port}`);
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
 });
