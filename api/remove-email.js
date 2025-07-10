@@ -1,16 +1,17 @@
 const fetch = require('node-fetch');
 
-async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method Not Allowed' });
+    return res.status(405).json({ error: 'Only POST method allowed' });
   }
 
   const { cookie } = req.body;
   if (!cookie) {
-    return res.status(400).json({ message: 'Missing cookie' });
+    return res.status(400).json({ status: 'error', message: 'Missing .ROBLOSECURITY cookie' });
   }
 
   try {
+    // Step 1: Get CSRF token
     const csrfRes = await fetch('https://auth.roblox.com/v2/logout', {
       method: 'POST',
       headers: {
@@ -19,8 +20,10 @@ async function handler(req, res) {
     });
 
     const csrfToken = csrfRes.headers.get('x-csrf-token');
+    if (!csrfToken) throw new Error('Failed to get CSRF token');
 
-    const res2 = await fetch('https://accountinformation.roblox.com/v1/email', {
+    // Step 2: Delete email
+    const deleteRes = await fetch('https://accountinformation.roblox.com/v1/email', {
       method: 'DELETE',
       headers: {
         'X-CSRF-TOKEN': csrfToken,
@@ -29,15 +32,15 @@ async function handler(req, res) {
       }
     });
 
-    if (res2.status === 200) {
-      return res.json({ message: '✅ Successfully removed email!' });
+    const data = await deleteRes.json();
+
+    if (deleteRes.ok) {
+      return res.status(200).json({ status: 'success', message: 'Email removed successfully.' });
     } else {
-      const err = await res2.json();
-      return res.status(res2.status).json({ message: `❌ Failed: ${err.errors?.[0]?.message || 'Unknown error'}` });
+      const errMsg = data?.errors?.[0]?.message || 'Unknown error';
+      return res.status(400).json({ status: 'error', message: errMsg });
     }
   } catch (err) {
-    return res.status(500).json({ message: '❌ Server error: ' + err.message });
+    return res.status(500).json({ status: 'error', message: err.message });
   }
-}
-
-module.exports = handler;
+};
