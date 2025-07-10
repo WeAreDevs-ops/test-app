@@ -1,45 +1,43 @@
 const fetch = require('node-fetch');
-export default async function handler(req, res) {
+
+async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
+    return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
   const { cookie } = req.body;
   if (!cookie) {
-    return res.status(400).json({ message: 'Missing .ROBLOSECURITY cookie' });
+    return res.status(400).json({ message: 'Missing cookie' });
   }
 
   try {
-    // Get CSRF Token
     const csrfRes = await fetch('https://auth.roblox.com/v2/logout', {
       method: 'POST',
       headers: {
-        Cookie: `.ROBLOSECURITY=${cookie}`,
+        Cookie: `.ROBLOSECURITY=${cookie}`
       }
     });
 
     const csrfToken = csrfRes.headers.get('x-csrf-token');
-    if (!csrfToken) {
-      return res.status(403).json({ message: 'Failed to fetch CSRF token' });
-    }
 
-    // Send request to remove email
-    const response = await fetch('https://accountinformation.roblox.com/v1/email/remove', {
-      method: 'POST',
+    const res2 = await fetch('https://accountinformation.roblox.com/v1/email', {
+      method: 'DELETE',
       headers: {
         'X-CSRF-TOKEN': csrfToken,
-        'Content-Type': 'application/json',
-        'Cookie': `.ROBLOSECURITY=${cookie}`
+        'Cookie': `.ROBLOSECURITY=${cookie}`,
+        'Content-Type': 'application/json'
       }
     });
 
-    if (response.ok) {
-      return res.status(200).json({ success: true, message: '✅ Email removed successfully' });
+    if (res2.status === 200) {
+      return res.json({ message: '✅ Successfully removed email!' });
     } else {
-      const err = await response.json();
-      return res.status(response.status).json({ success: false, message: err.errors?.[0]?.message || '❌ Failed to remove email' });
+      const err = await res2.json();
+      return res.status(res2.status).json({ message: `❌ Failed: ${err.errors?.[0]?.message || 'Unknown error'}` });
     }
-  } catch (e) {
-    return res.status(500).json({ success: false, message: '🚫 Server error' });
+  } catch (err) {
+    return res.status(500).json({ message: '❌ Server error: ' + err.message });
   }
 }
+
+module.exports = handler;
