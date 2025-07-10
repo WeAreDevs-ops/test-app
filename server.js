@@ -1,59 +1,53 @@
-const express = require('express');
-const fetch = require('node-fetch');
-const cors = require('cors');
-const bodyParser = require('body-parser');
+const express = require("express");
+const fetch = require("node-fetch");
+const path = require("path");
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+const PORT = process.env.PORT || 8080;
 
-// Health check
-app.get('/', (req, res) => {
-  res.send('✅ API is live');
-});
+app.use(express.json());
+app.use(express.static("public")); // Serve index.html from /public
 
-// POST endpoint to remove email
-app.post('/api/remove-email', async (req, res) => {
+app.post("/api/remove-email", async (req, res) => {
   const cookie = req.body.cookie;
-
-  if (!cookie || !cookie.includes('_|')) {
-    return res.status(400).json({ status: 'error', message: 'Invalid .ROBLOSECURITY cookie' });
-  }
+  if (!cookie) return res.status(400).json({ status: "error", message: "Missing cookie" });
 
   try {
-    // Step 1: Get CSRF token
-    const csrfRes = await fetch('https://auth.roblox.com/v2/logout', {
-      method: 'POST',
+    const csrfRes = await fetch("https://auth.roblox.com/v2/logout", {
+      method: "POST",
       headers: {
-        Cookie: `.ROBLOSECURITY=${cookie}`
+        Cookie: `.ROBLOSECURITY=${cookie}`,
       }
     });
 
-    const csrfToken = csrfRes.headers.get('x-csrf-token');
-    if (!csrfToken) throw new Error('CSRF token not received');
+    const csrfToken = csrfRes.headers.get("x-csrf-token");
+    if (!csrfToken) return res.status(403).json({ status: "error", message: "CSRF token missing" });
 
-    // Step 2: Request email removal
-    const removeRes = await fetch('https://accountinformation.roblox.com/v1/email/remove', {
-      method: 'POST',
+    const removeRes = await fetch("https://accountinformation.roblox.com/v1/email", {
+      method: "DELETE",
       headers: {
-        'x-csrf-token': csrfToken,
-        'Content-Type': 'application/json',
-        Cookie: `.ROBLOSECURITY=${cookie}`
+        "Content-Type": "application/json",
+        "X-CSRF-TOKEN": csrfToken,
+        "Cookie": `.ROBLOSECURITY=${cookie}`
       }
     });
 
-    const data = await removeRes.json();
-
-    if (removeRes.ok) {
-      return res.json({ status: 'success', message: '✅ Email removed successfully.' });
+    if (removeRes.status === 200) {
+      return res.json({ status: "success", message: "✅ Email removed!" });
     } else {
-      return res.status(400).json({ status: 'fail', message: data.errors?.[0]?.message || '❌ Failed to remove email' });
+      const errData = await removeRes.json();
+      return res.status(removeRes.status).json({ status: "error", message: errData.errors?.[0]?.message || "Failed to remove email" });
     }
-
-  } catch (error) {
-    return res.status(500).json({ status: 'error', message: '⚠️ Server Error: ' + error.message });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: "Server error" });
   }
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+// Fallback: always serve index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
