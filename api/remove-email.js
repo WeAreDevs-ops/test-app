@@ -1,16 +1,22 @@
-// ... (previous code)
+const express = require('express');
+const https = require('https');
+const bodyParser = require('body-parser');
 
-function robloxRequest({ method, hostname, path, cookie, csrfToken = '', includeCsrf = false }) {
-  return new Promise((resolve) => {
+const app = express();
+app.use(bodyParser.json());
+
+// Function to make Roblox API requests with CSRF support
+function robloxRequest({ method, hostname, path, cookie, body = null, csrfToken = '' }) {
+  return new Promise((resolve, reject) => {
     const options = {
       method,
       hostname,
       path,
       headers: {
         'Content-Type': 'application/json',
+        'Cookie': `.ROBLOSECURITY=${cookie}`,
         'User-Agent': 'Roblox/WinInet',
         'Accept': 'application/json',
-        'Cookie': `.ROBLOSECURITY=${cookie}`,
       },
     };
 
@@ -22,113 +28,76 @@ function robloxRequest({ method, hostname, path, cookie, csrfToken = '', include
       let data = '';
       const csrf = res.headers['x-csrf-token'];
 
-      res.on('data', (chunk) => (data += chunk));
+      res.on('data', (chunk) => data += chunk);
       res.on('end', () => {
         try {
           const json = JSON.parse(data || '{}');
-          if (includeCsrf) {
-            resolve(json);
-          } else {
-            resolve({ ...json, csrfToken: csrf });
-          }
-        } catch (e) {
+          resolve({ ...json, csrfToken: csrf });
+        } catch (err) {
           resolve({ error: 'Failed to parse response', raw: data });
         }
       });
     });
 
     req.on('error', (err) => {
-      console.error('Request error:', err);
-      resolve({ error: 'Request failed' });
+      reject({ error: 'Request failed', details: err });
     });
 
-    req.write('{}');
-    req.end();
-  }).catch((err) => {
-    console.error('robloxRequest error:', err);
-    if (err.error === 'Request failed') {
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(robloxRequest({ ...err.options, csrfToken: '' }));
-        }, 1000);
-      });
+    if (body) {
+      req.write(JSON.stringify(body));
+    } else {
+      req.write('{}');
     }
-    throw err;
+
+    req.end();
   });
 }
 
-function removeEmail(cookie) {
-  const request = {
+// Function to remove email using correct Roblox endpoint
+async function removeEmail(cookie) {
+  // First request to get CSRF token
+  const preflight = await robloxRequest({
     method: 'POST',
-    hostname: 'api.roblox.com',
-    path: '/user/managed-emails/remove',
-    cookie: cookie,
-    includeCsrf: true,
-  };
+    hostname: 'accountinformation.roblox.com',
+    path: '/v1/email/remove',
+    cookie,
+  });
 
-  return robloxRequest(request)
-    .then((response) => {
-      if (response.error) {
-        throw response.error;
-      }
-      return response;
-    })
-    .then((response) => {
-      const email = response.email;
-      if (!email) {
-        throw new Error('Failed to get email');
-      }
-      const url = `https://www.roblox.com/user/${response.userId}/managed-emails`;
-      const payload = {
-        csrfToken: response.csrfToken,
-        email: '',
-      };
+  if (!preflight.csrfToken) {
+    return { error: 'Failed to fetch CSRF token' };
+  }
 
-      return robloxRequest({
-        method: 'POST',
-        hostname: 'api.roblox.com',
-        path: url,
-        cookie: cookie,
-        csrfToken: response.csrfToken,
-        body: JSON.stringify(payload),
-      });
-    })
-    .then((response) => {
-      if (response.error) {
-        throw response.error;
-      }
-      return response;
-    })
-    .then((response) => {
-      console.log('Email removed successfully:', response);
-      return response;
-    })
-    .catch((err) => {
-      console.error('Error removing email:', err);
-      throw err;
-    });
+  // Second request: actually remove the email
+  const final = await robloxRequest({
+    method: 'POST',
+    hostname: 'accountinformation.roblox.com',
+    path: '/v1/email/remove',
+    cookie,
+    csrfToken: preflight.csrfToken,
+  });
+
+  return final;
 }
 
-// ... (previous code)
-
-document.getElementById('removeForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const cookie = document.getElementById('cookieInput').value.trim();
-  const resultDiv = document.getElementById('result');
-  resultDiv.textContent = "⏳ Processing...";
+// API route
+app.post('/remove-email', async (req, res) => {
+  const cookie = req.body.cookie;
+  if (!cookie) return res.status(400).json({ error: 'No cookie provided' });
 
   try {
-    const res = await removeEmail(cookie);
-    if (res.error) {
-      if (res.error === 'Request failed') {
-        resultDiv.textContent = `❌ Request failed: ${res.raw}`;
-      } else {
-        resultDiv.textContent = `❌ Failed: ${res.error || 'Unknown error'}`;
-      }
-    } else {
-      resultDiv.textContent = `✅ ${res.message}`;
+    const result = await removeEmail(cookie);
+
+    if (result.errors) {
+      return res.status(400).json({ error: 'Failed', details: result.errors });
     }
+
+    res.status(200).json({ success: true, message: 'Email removed successfully' });
   } catch (err) {
-    resultDiv.textContent = `❌ Request failed: ${err.message}`;
+    res.status(500).json({ error: 'Server error', details: err });
   }
+});
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
