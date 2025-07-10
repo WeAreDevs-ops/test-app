@@ -62,11 +62,11 @@ export default async function handler(req, res) {
     const emailInfo = await robloxRequest({
       method: 'GET',
       hostname: 'accountinformation.roblox.com',
-      path: '/v1/email',
+      path: `/v1/users/${cookie}/email`,
       cookie,
     });
 
-    if (!emailInfo.emailAddress) {
+    if (!emailInfo) {
       return res.status(400).json({ error: 'No email found on account or invalid cookie' });
     }
 
