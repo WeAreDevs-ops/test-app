@@ -1,18 +1,17 @@
 const express = require('express');
-const path = require('path');
+const bodyParser = require('body-parser');
 const handler = require('./api/remove-email');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json());
 
-// API route
+// POST endpoint for removing email
 app.post('/api/remove-email', handler);
 
-// Default
-app.get('/api', (req, res) => {
+// Simple GET homepage
+app.get('/', (req, res) => {
   res.send('✅ API is live');
 });
 
