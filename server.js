@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const bodyParser = require('body-parser');
 const handler = require('./api/remove-email');
 
@@ -7,12 +8,15 @@ const PORT = process.env.PORT || 8080;
 
 app.use(bodyParser.json());
 
-// POST endpoint for removing email
+// Serve HTML/CSS/JS from public folder
+app.use(express.static(path.join(__dirname, 'public')));
+
+// API handler
 app.post('/api/remove-email', handler);
 
-// Simple GET homepage
-app.get('/', (req, res) => {
-  res.send('✅ API is live');
+// Fallback if page not found
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
