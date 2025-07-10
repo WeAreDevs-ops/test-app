@@ -1,46 +1,39 @@
 const fetch = require('node-fetch');
 
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST method allowed' });
-  }
-
+module.exports = async function (req, res) {
   const { cookie } = req.body;
-  if (!cookie) {
-    return res.status(400).json({ status: 'error', message: 'Missing .ROBLOSECURITY cookie' });
+
+  if (!cookie || !cookie.startsWith('_|')) {
+    return res.status(400).json({ status: 'error', message: 'Invalid or missing cookie.' });
   }
 
   try {
-    // Step 1: Get CSRF token
+    // Get CSRF token
     const csrfRes = await fetch('https://auth.roblox.com/v2/logout', {
       method: 'POST',
-      headers: {
-        Cookie: `.ROBLOSECURITY=${cookie}`
-      }
+      headers: { Cookie: `.ROBLOSECURITY=${cookie}` }
     });
 
     const csrfToken = csrfRes.headers.get('x-csrf-token');
     if (!csrfToken) throw new Error('Failed to get CSRF token');
 
-    // Step 2: Delete email
+    // Send DELETE request to remove email
     const deleteRes = await fetch('https://accountinformation.roblox.com/v1/email', {
       method: 'DELETE',
       headers: {
-        'X-CSRF-TOKEN': csrfToken,
-        'Cookie': `.ROBLOSECURITY=${cookie}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+        'Cookie': `.ROBLOSECURITY=${cookie}`
       }
     });
 
-    const data = await deleteRes.json();
-
-    if (deleteRes.ok) {
-      return res.status(200).json({ status: 'success', message: 'Email removed successfully.' });
+    if (deleteRes.status === 200) {
+      return res.json({ status: 'success', message: 'Email removed successfully.' });
     } else {
-      const errMsg = data?.errors?.[0]?.message || 'Unknown error';
-      return res.status(400).json({ status: 'error', message: errMsg });
+      const err = await deleteRes.text();
+      return res.status(deleteRes.status).json({ status: 'fail', message: `Unknown error: ${err}` });
     }
   } catch (err) {
-    return res.status(500).json({ status: 'error', message: err.message });
+    return res.status(500).json({ status: 'fail', message: 'Request failed.' });
   }
 };
