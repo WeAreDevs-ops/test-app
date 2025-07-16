@@ -196,17 +196,14 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
       Accept: "application/json",
       "Content-Length": Buffer.byteLength(payload),
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      "Roblox-Challenge-Id": challengeId || "",
-      "Roblox-Challenge-Type": "email",
-      "Roblox-Challenge-Metadata": challengeId ? JSON.stringify({challengeId: challengeId}) : "",
     };
 
-    // Remove empty headers
-    Object.keys(headers).forEach(key => {
-      if (headers[key] === "" || headers[key] === null) {
-        delete headers[key];
-      }
-    });
+    // Add challenge headers if retrying after challenge
+    if (challengeId) {
+      headers["rblx-challenge-id"] = challengeId;
+      headers["rblx-challenge-type"] = "twostepverification";
+      headers["rblx-challenge-metadata"] = "{}";
+    }
 
     const req = https.request(
       {
@@ -230,16 +227,16 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
             if (res.statusCode === 403 && parsed.errors) {
               const challengeError = parsed.errors.find(e => e.code === 0 || e.message?.includes("Challenge"));
               if (challengeError) {
-                // Check for challenge headers
-                const challengeId = res.headers["roblox-challenge-id"];
-                const challengeType = res.headers["roblox-challenge-type"];
+                // Check for challenge headers (use rblx- prefix)
+                const challengeId = res.headers["rblx-challenge-id"];
+                const challengeType = res.headers["rblx-challenge-type"];
 
                 if (challengeId && challengeType) {
                   resolve({
                     needsChallenge: true,
                     challengeId: challengeId,
                     challengeType: challengeType,
-                    challengeMetadata: res.headers["roblox-challenge-metadata"],
+                    challengeMetadata: res.headers["rblx-challenge-metadata"],
                     error: "Challenge verification required"
                   });
                   return;
@@ -307,7 +304,7 @@ function continueChallenge(cookie, csrfToken, challengeId) {
       {
         method: "POST",
         hostname: "auth.roblox.com",
-        path: "/v2/challenge",
+        path: "/v2/challenges/continue",
         headers: {
           Cookie: `.ROBLOSECURITY=${cookie}`,
           "X-CSRF-TOKEN": csrfToken,
