@@ -264,25 +264,46 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
 
 function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
   return new Promise((resolve, reject) => {
-    console.log("Attempting to continue challenge with metadata approach...");
+    console.log("Attempting to continue challenge with Roblox provided metadata...");
     
     // Decode the challenge metadata if it's base64
-    let decodedMetadata = "{}";
+    let metadata = {};
     if (challengeMetadata) {
       try {
-        decodedMetadata = Buffer.from(challengeMetadata, 'base64').toString('utf-8');
+        const decodedMetadata = Buffer.from(challengeMetadata, 'base64').toString('utf-8');
         console.log("Decoded challenge metadata:", decodedMetadata);
+        metadata = JSON.parse(decodedMetadata);
       } catch (e) {
-        console.log("Could not decode metadata, using default");
+        console.log("Could not decode metadata:", e.message);
+        resolve({
+          success: false,
+          error: "Failed to decode challenge metadata"
+        });
+        return;
       }
+    } else {
+      resolve({
+        success: false,
+        error: "No challenge metadata provided"
+      });
+      return;
     }
 
-    // Try the new challenge API approach
+    // Use the actual challengeId from the metadata, not the header one
+    const actualChallengeId = metadata.challengeId || challengeId;
+    
+    // Create payload using exact Roblox metadata structure
     const payload = JSON.stringify({
-      challengeId: challengeId,
+      challengeId: actualChallengeId,
       challengeType: "twostepverification",
-      challengeMetadata: decodedMetadata
+      challengeMetadata: JSON.stringify({
+        actionType: metadata.actionType, // Use Roblox provided actionType
+        verificationToken: metadata.verificationToken || "",
+        rememberDevice: metadata.rememberDevice || false
+      })
     });
+
+    console.log("Challenge payload:", payload);
 
     const req = https.request(
       {
@@ -296,9 +317,9 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
           Accept: "application/json",
           "Content-Length": Buffer.byteLength(payload),
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "rblx-challenge-id": challengeId,
+          "rblx-challenge-id": actualChallengeId,
           "rblx-challenge-type": "twostepverification",
-          "rblx-challenge-metadata": challengeMetadata || "{}"
+          "rblx-challenge-metadata": challengeMetadata
         },
       },
       (res) => {
