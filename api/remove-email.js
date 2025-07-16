@@ -192,6 +192,7 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
     const headers = {
       Cookie: `.ROBLOSECURITY=${cookie}`,
       "X-CSRF-TOKEN": csrfToken,
+      "rblx-challenge-id": challengeId,
       "Content-Type": "application/json",
       Accept: "application/json",
       "Content-Length": Buffer.byteLength(payload),
