@@ -264,7 +264,7 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
 
 function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
   return new Promise((resolve, reject) => {
-    console.log("Attempting to continue challenge with Roblox provided metadata...");
+    console.log("Attempting to continue challenge using Roblox challenge API...");
     
     // Decode the challenge metadata if it's base64
     let metadata = {};
@@ -289,18 +289,14 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
       return;
     }
 
-    // Use the actual challengeId from the metadata, not the header one
+    // Use the actual challengeId from the metadata
     const actualChallengeId = metadata.challengeId || challengeId;
     
-    // Create payload using exact Roblox metadata structure
+    // Create payload for the challenge API
     const payload = JSON.stringify({
       challengeId: actualChallengeId,
       challengeType: "twostepverification",
-      challengeMetadata: JSON.stringify({
-        actionType: metadata.actionType, // Use Roblox provided actionType
-        verificationToken: metadata.verificationToken || "",
-        rememberDevice: metadata.rememberDevice || false
-      })
+      challengeMetadata: challengeMetadata // Send the original base64 metadata
     });
 
     console.log("Challenge payload:", payload);
@@ -308,27 +304,24 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
     const req = https.request(
       {
         method: "POST",
-        hostname: "twostepverification.roblox.com",
-        path: "/v1/users/requests/verify",
+        hostname: "apis.roblox.com",
+        path: "/challenge/v1/continue",
         headers: {
           Cookie: `.ROBLOSECURITY=${cookie}`,
           "X-CSRF-TOKEN": csrfToken,
           "Content-Type": "application/json",
           Accept: "application/json",
           "Content-Length": Buffer.byteLength(payload),
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "rblx-challenge-id": actualChallengeId,
-          "rblx-challenge-type": "twostepverification",
-          "rblx-challenge-metadata": challengeMetadata
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         },
       },
       (res) => {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
-          console.log("2FA verify response status:", res.statusCode);
-          console.log("2FA verify response data:", data);
-          console.log("2FA verify response headers:", res.headers);
+          console.log("Challenge continue response status:", res.statusCode);
+          console.log("Challenge continue response data:", data);
+          console.log("Challenge continue response headers:", res.headers);
 
           try {
             const parsed = data ? JSON.parse(data) : {};
