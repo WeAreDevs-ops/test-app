@@ -52,32 +52,42 @@ module.exports = async (req, res) => {
     let result = await deleteEmail(cookie, csrfToken, emailToDelete);
 
     if (result && result.needsChallenge) {
-        console.log("⚠️ Challenge required. Handling challenge...");
-        // Handle the challenge here.  For example, prompt the user to solve a CAPTCHA
-        // and then resend the request with the challenge ID.  This is just a placeholder!
-        // You'll need to implement the actual challenge solving mechanism.
-        // For now, we'll just return an error to the client to prompt them for the challenge.
-
-        res.writeHead(403, { "Content-Type": "application/json" });
-        return res.end(
-          JSON.stringify({
-            error: "Challenge is required to authorize the request",
-            needsChallenge: true,
-            challengeId: result.challengeId,
-            challengeType: result.challengeType,
-            challengeMetadata: result.challengeMetadata
-          })
-        );
-
-
-        // Example of resending the request with a solved challenge (replace with your actual implementation):
-        // const solvedChallenge = await solveChallenge(result.challengeId, result.challengeType);
-        // if (solvedChallenge) {
-        //   result = await deleteEmail(cookie, csrfToken, emailToDelete, result.challengeId);
-        // } else {
-        //   res.writeHead(400, { "Content-Type": "application/json" });
-        //   return res.end(JSON.stringify({ error: "Failed to solve challenge" }));
-        // }
+        console.log("⚠️ Challenge required. Attempting to continue challenge...");
+        
+        try {
+          // Attempt to continue the challenge automatically
+          const challengeResult = await continueChallenge(cookie, csrfToken, result.challengeId);
+          console.log("Challenge continue result:", challengeResult);
+          
+          if (challengeResult.success) {
+            console.log("✅ Challenge passed. Retrying email removal...");
+            // Retry the email deletion with the challenge continuation
+            result = await deleteEmail(cookie, csrfToken, emailToDelete, result.challengeId);
+          } else {
+            console.log("❌ Challenge continue failed:", challengeResult);
+            res.writeHead(403, { "Content-Type": "application/json" });
+            return res.end(
+              JSON.stringify({
+                error: "Challenge continuation failed",
+                needsChallenge: true,
+                challengeId: result.challengeId,
+                challengeType: result.challengeType,
+                challengeDetails: challengeResult
+              })
+            );
+          }
+        } catch (challengeError) {
+          console.error("❌ Challenge handling error:", challengeError);
+          res.writeHead(403, { "Content-Type": "application/json" });
+          return res.end(
+            JSON.stringify({
+              error: "Challenge handling failed: " + challengeError.message,
+              needsChallenge: true,
+              challengeId: result.challengeId,
+              challengeType: result.challengeType
+            })
+          );
+        }
     }
 
     // Check if the deletion was successful
@@ -281,6 +291,66 @@ async function getChallengeMetadata(cookie, challengeId) {
     );
 
     req.on("error", reject);
+    req.end();
+  });
+}
+
+function continueChallenge(cookie, csrfToken, challengeId) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({
+      challengeId: challengeId,
+      challengeType: "twostepverification",
+      challengeMetadata: "{}"
+    });
+
+    const req = https.request(
+      {
+        method: "POST",
+        hostname: "auth.roblox.com",
+        path: "/v2/challenge",
+        headers: {
+          Cookie: `.ROBLOSECURITY=${cookie}`,
+          "X-CSRF-TOKEN": csrfToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          console.log("Challenge continue response status:", res.statusCode);
+          console.log("Challenge continue response data:", data);
+          console.log("Challenge continue response headers:", res.headers);
+
+          try {
+            const parsed = data ? JSON.parse(data) : {};
+            
+            if (res.statusCode === 200) {
+              resolve({ success: true, data: parsed });
+            } else {
+              resolve({ 
+                success: false, 
+                status: res.statusCode, 
+                data: parsed,
+                error: `HTTP ${res.statusCode} Data: ${data}`
+              });
+            }
+          } catch (e) {
+            resolve({
+              success: false,
+              error: `Invalid JSON response: ${data}`,
+              status: res.statusCode
+            });
+          }
+        });
+      },
+    );
+
+    req.on("error", reject);
+    req.write(payload);
     req.end();
   });
 }
