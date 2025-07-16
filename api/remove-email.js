@@ -264,24 +264,9 @@ function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
 
 function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
   return new Promise((resolve, reject) => {
-    console.log("Attempting to continue challenge using Roblox challenge API...");
+    console.log("Attempting to continue challenge using latest Roblox challenge API...");
     
-    // Decode the challenge metadata if it's base64
-    let metadata = {};
-    if (challengeMetadata) {
-      try {
-        const decodedMetadata = Buffer.from(challengeMetadata, 'base64').toString('utf-8');
-        console.log("Decoded challenge metadata:", decodedMetadata);
-        metadata = JSON.parse(decodedMetadata);
-      } catch (e) {
-        console.log("Could not decode metadata:", e.message);
-        resolve({
-          success: false,
-          error: "Failed to decode challenge metadata"
-        });
-        return;
-      }
-    } else {
+    if (!challengeMetadata) {
       resolve({
         success: false,
         error: "No challenge metadata provided"
@@ -289,14 +274,10 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
       return;
     }
 
-    // Use the actual challengeId from the metadata
-    const actualChallengeId = metadata.challengeId || challengeId;
-    
-    // Create payload for the two-step verification continue API
+    // Create payload using the exact same data Roblox provided
     const payload = JSON.stringify({
-      challengeId: actualChallengeId,
-      actionType: metadata.actionType || "Generic",
-      code: "" // Empty code to trigger automatic verification if possible
+      challengeId: challengeId,
+      challengeMetadata: challengeMetadata // Send back the exact same base64 metadata
     });
 
     console.log("Challenge payload:", payload);
@@ -304,18 +285,15 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
     const req = https.request(
       {
         method: "POST",
-        hostname: "twostepverification.roblox.com",
-        path: "/v1/users/requests/continue",
+        hostname: "apis.roblox.com",
+        path: "/challenge/v1/continue",
         headers: {
           Cookie: `.ROBLOSECURITY=${cookie}`,
           "X-CSRF-TOKEN": csrfToken,
           "Content-Type": "application/json",
           Accept: "application/json",
           "Content-Length": Buffer.byteLength(payload),
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "rblx-challenge-id": actualChallengeId,
-          "rblx-challenge-type": "twostepverification",
-          "rblx-challenge-metadata": challengeMetadata
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         },
       },
       (res) => {
