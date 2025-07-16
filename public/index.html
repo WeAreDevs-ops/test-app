@@ -327,9 +327,12 @@ Example formats accepted:
         } else {
           let errorMsg = data.error || 'Something went wrong';
           
-          // Provide more helpful error messages
-          if (errorMsg.includes('Challenge is required')) {
-            errorMsg = '🔐 2FA verification required by Roblox. Check your email for verification code and try again.';
+          // Handle challenge responses
+          if (data.needsChallenge) {
+            errorMsg = `🔐 Two-factor authentication required. Challenge ID: ${data.challengeId}. Please complete the verification and try again with manual challenge handling.`;
+            console.log('Challenge details:', data);
+          } else if (errorMsg.includes('Challenge is required')) {
+            errorMsg = '🔐 2FA verification required by Roblox. This may require manual verification through Roblox directly.';
           } else if (errorMsg.includes('Invalid cookie')) {
             errorMsg = '🍪 Invalid cookie format. Please check your .ROBLOSECURITY cookie.';
           } else if (errorMsg.includes('No email linked')) {

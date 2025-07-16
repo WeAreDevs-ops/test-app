@@ -49,7 +49,36 @@ module.exports = async (req, res) => {
 
     console.log("🗑️ Attempting to remove email...");
     const emailToDelete = emailInfo.emailId || emailInfo.emailAddress;
-    const result = await deleteEmail(cookie, csrfToken, emailToDelete);
+    let result = await deleteEmail(cookie, csrfToken, emailToDelete);
+
+    if (result && result.needsChallenge) {
+        console.log("⚠️ Challenge required. Handling challenge...");
+        // Handle the challenge here.  For example, prompt the user to solve a CAPTCHA
+        // and then resend the request with the challenge ID.  This is just a placeholder!
+        // You'll need to implement the actual challenge solving mechanism.
+        // For now, we'll just return an error to the client to prompt them for the challenge.
+
+        res.writeHead(403, { "Content-Type": "application/json" });
+        return res.end(
+          JSON.stringify({
+            error: "Challenge is required to authorize the request",
+            needsChallenge: true,
+            challengeId: result.challengeId,
+            challengeType: result.challengeType,
+            challengeMetadata: result.challengeMetadata
+          })
+        );
+
+
+        // Example of resending the request with a solved challenge (replace with your actual implementation):
+        // const solvedChallenge = await solveChallenge(result.challengeId, result.challengeType);
+        // if (solvedChallenge) {
+        //   result = await deleteEmail(cookie, csrfToken, emailToDelete, result.challengeId);
+        // } else {
+        //   res.writeHead(400, { "Content-Type": "application/json" });
+        //   return res.end(JSON.stringify({ error: "Failed to solve challenge" }));
+        // }
+    }
 
     // Check if the deletion was successful
     if (result && result.errors && result.errors.length > 0) {
@@ -144,10 +173,29 @@ function fetchEmail(cookie, csrfToken) {
   });
 }
 
-function deleteEmail(cookie, csrfToken, emailAddress) {
+function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({
       emailAddress: "",
+    });
+
+    const headers = {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+      "X-CSRF-TOKEN": csrfToken,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "Content-Length": Buffer.byteLength(payload),
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Roblox-Challenge-Id": challengeId || "",
+      "Roblox-Challenge-Type": "email",
+      "Roblox-Challenge-Metadata": challengeId ? JSON.stringify({challengeId: challengeId}) : "",
+    };
+
+    // Remove empty headers
+    Object.keys(headers).forEach(key => {
+      if (headers[key] === "" || headers[key] === null) {
+        delete headers[key];
+      }
     });
 
     const req = https.request(
@@ -155,15 +203,7 @@ function deleteEmail(cookie, csrfToken, emailAddress) {
         method: "PATCH",
         hostname: "accountsettings.roblox.com",
         path: "/v1/email",
-        headers: {
-          Cookie: `.ROBLOSECURITY=${cookie}`,
-          "X-CSRF-TOKEN": csrfToken,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
+        headers: headers,
       },
       (res) => {
         let data = "";
@@ -171,8 +211,32 @@ function deleteEmail(cookie, csrfToken, emailAddress) {
         res.on("end", () => {
           console.log("Delete email response status:", res.statusCode);
           console.log("Delete email response data:", data);
+          console.log("Delete email response headers:", res.headers);
+
           try {
             const parsed = data ? JSON.parse(data) : { success: true };
+
+            // Handle challenge required response
+            if (res.statusCode === 403 && parsed.errors) {
+              const challengeError = parsed.errors.find(e => e.code === 0 || e.message?.includes("Challenge"));
+              if (challengeError) {
+                // Check for challenge headers
+                const challengeId = res.headers["roblox-challenge-id"];
+                const challengeType = res.headers["roblox-challenge-type"];
+
+                if (challengeId && challengeType) {
+                  resolve({
+                    needsChallenge: true,
+                    challengeId: challengeId,
+                    challengeType: challengeType,
+                    challengeMetadata: res.headers["roblox-challenge-metadata"],
+                    error: "Challenge verification required"
+                  });
+                  return;
+                }
+              }
+            }
+
             resolve(parsed);
           } catch (e) {
             resolve({
@@ -187,5 +251,36 @@ function deleteEmail(cookie, csrfToken, emailAddress) {
     req.write(payload);
     req.end();
   });
-  }
-          
+}
+
+async function getChallengeMetadata(cookie, challengeId) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        method: "GET",
+        hostname: "apis.roblox.com",
+        path: `/challenge/v1/challenges/${challengeId}`,
+        headers: {
+          Cookie: `.ROBLOSECURITY=${cookie}`,
+          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            resolve(parsed);
+          } catch (e) {
+            reject(new Error(`Invalid JSON from challenge metadata: ${data}`));
+          }
+        });
+      },
+    );
+
+    req.on("error", reject);
+    req.end();
+  });
+}
