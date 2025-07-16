@@ -292,11 +292,11 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
     // Use the actual challengeId from the metadata
     const actualChallengeId = metadata.challengeId || challengeId;
     
-    // Create payload for the challenge API
+    // Create payload for the two-step verification continue API
     const payload = JSON.stringify({
       challengeId: actualChallengeId,
-      challengeType: "twostepverification",
-      challengeMetadata: challengeMetadata // Send the original base64 metadata
+      actionType: metadata.actionType || "Generic",
+      code: "" // Empty code to trigger automatic verification if possible
     });
 
     console.log("Challenge payload:", payload);
@@ -304,15 +304,18 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
     const req = https.request(
       {
         method: "POST",
-        hostname: "apis.roblox.com",
-        path: "/challenge/v1/continue",
+        hostname: "twostepverification.roblox.com",
+        path: "/v1/users/requests/continue",
         headers: {
           Cookie: `.ROBLOSECURITY=${cookie}`,
           "X-CSRF-TOKEN": csrfToken,
           "Content-Type": "application/json",
           Accept: "application/json",
           "Content-Length": Buffer.byteLength(payload),
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "rblx-challenge-id": actualChallengeId,
+          "rblx-challenge-type": "twostepverification",
+          "rblx-challenge-metadata": challengeMetadata
         },
       },
       (res) => {
