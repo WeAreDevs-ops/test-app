@@ -5,7 +5,7 @@ const path = require('path');
 const url = require('url');
 
 // Import the API handler
-const removeEmailAPI = require('./api/remove-email.js');
+const changeBirthdateAPI = require('./api/remove-email.js');
 
 const PORT = process.env.PORT || 5000;
 
@@ -14,7 +14,7 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
 
   // Handle API routes
-  if (pathname === '/api/remove-email') {
+  if (pathname === '/api/change-birthdate') {
     // Parse POST body for API
     if (req.method === 'POST') {
       let body = '';
@@ -27,10 +27,10 @@ const server = http.createServer(async (req, res) => {
         } catch (e) {
           req.body = {};
         }
-        removeEmailAPI(req, res);
+        changeBirthdateAPI(req, res);
       });
     } else {
-      removeEmailAPI(req, res);
+      changeBirthdateAPI(req, res);
     }
     return;
   }
@@ -74,6 +74,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
-  console.log(`📧 Roblox Email Remover API ready`);
+  console.log(`ðŸš€ Server running on http://0.0.0.0:${PORT}`);
+  console.log(`ðŸŽ‚ Roblox Birthdate Changer API ready`);
 });
