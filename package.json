@@ -4,7 +4,7 @@
   "dependencies": {
     "node-fetch": "^2.6.9",
     "request-promise": "^4.2.6",
-    "puppeteer-core": "^21.3.8",
-     "chrome-aws-lambda": "^10.1.0"
+    "chrome-aws-lambda": "^10.1.0",
+    "puppeteer-core": "^10.1.0"
   }
 }
