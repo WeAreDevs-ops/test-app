@@ -25,11 +25,12 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // ✅ Launch headless Chromium with chrome-aws-lambda
+    // ✅ Proper Puppeteer launch for Vercel
     const browser = await puppeteer.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath,
+      executablePath: (await chromium.executablePath) || "/usr/bin/chromium-browser",
       headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     });
 
     const page = await browser.newPage();
